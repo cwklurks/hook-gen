@@ -1,0 +1,12 @@
+FROM qwen3:8b
+
+# inference defaults
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+PARAMETER num_predict 1024
+PARAMETER stop "【"
+PARAMETER stop "】"
+
+SYSTEM You are concise, factual, and must only use provided context. Always cite sources like [1], [2], ...
+

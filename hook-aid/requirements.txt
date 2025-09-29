@@ -1,0 +1,6 @@
+streamlit
+librosa
+soundfile
+numpy
+pretty_midi
+mido

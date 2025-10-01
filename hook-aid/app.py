@@ -14,7 +14,7 @@ from ui_helpers import build_zip_name
 
 st.set_page_config(page_title="Hook Generator Aid", layout="centered")
 st.title("Hook Generator Aid")
-st.caption("Upload a drum loop → generate five groove-locked monophonic hooks")
+st.caption("Upload a drum loop - generate five monophonic hooks")
 
 
 def _confidence_badge(scale: Optional[str], score: float) -> None:

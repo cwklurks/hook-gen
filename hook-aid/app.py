@@ -16,6 +16,9 @@ st.set_page_config(page_title="Hook Generator Aid", layout="centered")
 st.title("Hook Generator Aid")
 st.caption("Upload a drum loop - generate five monophonic hooks")
 
+if "hook_seed" not in st.session_state:
+    st.session_state["hook_seed"] = 0
+
 
 def _confidence_badge(scale: Optional[str], score: float) -> None:
     if not scale:
@@ -34,6 +37,30 @@ def _confidence_badge(scale: Optional[str], score: float) -> None:
 
     msg = f"{note}: suggested scale **{scale}** (confidence {score:.2f})."
     getattr(st, tone)(msg)
+
+
+@st.cache_data(show_spinner=False)
+def _analyze_audio(file_bytes: bytes):
+    """Heavy audio analysis (load, tempo, histogram, scale) cached per upload."""
+    buffer = io.BytesIO(file_bytes)
+    audio_array, sample_rate = librosa.load(buffer, sr=22050, mono=True)
+
+    detected_bpm, beat_times = estimate_bpm_and_beats(audio_array, sample_rate)
+    ticks = ticks_from_beats(beat_times, subdiv=4)
+    histogram = groove_histogram(audio_array, sample_rate, ticks)
+    if histogram is None or not np.asarray(histogram).size or not np.any(histogram):
+        histogram = np.ones(16) / 16.0
+
+    suggested_scale, suggested_score = detect_scale_from_audio(audio_array, sample_rate)
+
+    return {
+        "audio": audio_array,
+        "sample_rate": sample_rate,
+        "detected_bpm": detected_bpm,
+        "histogram": histogram,
+        "suggested_scale": suggested_scale,
+        "suggested_score": suggested_score,
+    }
 
 
 file = st.file_uploader("Upload WAV/MP3", type=["wav", "mp3"])
@@ -61,17 +88,14 @@ register = st.select_slider("Pitch range", options=["low", "mid", "high"], value
 
 if file:
     uploaded_name = file.name
-    file.seek(0)
-    audio_bytes = file.read()
-    audio_array, sample_rate = librosa.load(io.BytesIO(audio_bytes), sr=22050, mono=True)
-
-    detected_bpm, beat_times = estimate_bpm_and_beats(audio_array, sample_rate)
-    ticks = ticks_from_beats(beat_times, subdiv=4)
-    histogram = groove_histogram(audio_array, sample_rate, ticks)
-    if histogram is None or not np.any(histogram):
-        histogram = np.ones(16) / 16.0
-
-    suggested_scale, suggested_score = detect_scale_from_audio(audio_array, sample_rate)
+    audio_bytes = file.getvalue()
+    analysis = _analyze_audio(audio_bytes)
+    audio_array = analysis["audio"]
+    sample_rate = analysis["sample_rate"]
+    detected_bpm = analysis["detected_bpm"]
+    histogram = analysis["histogram"]
+    suggested_scale = analysis["suggested_scale"]
+    suggested_score = analysis["suggested_score"]
     if suggested_scale and suggested_scale in scale_options:
         scale_index = scale_options.index(suggested_scale)
 
@@ -100,28 +124,39 @@ if file:
     _confidence_badge(suggested_scale, suggested_score)
 
 if audio_array is not None:
-    st.write(f"Detected BPM: **{detected_bpm:.1f}** (override with the slider if it feels wrong)")
+    bpm_display = detected_bpm if detected_bpm else 120.0
+    st.write(f"Detected BPM: **{bpm_display:.1f}** (override with the slider if it feels wrong)")
     bpm = st.slider(
         "BPM",
         60,
         180,
-        int(round(detected_bpm)),
+        int(round(bpm_display)),
         help="Use this to correct the tempo if the detector guesses wrong.",
     )
+
+    regenerate_clicked = st.button("Regenerate hooks")
+    if regenerate_clicked:
+        st.session_state["hook_seed"] += 1
+
+    base_seed = st.session_state["hook_seed"]
 
     reg_map = {"low": (48, 69), "mid": (55, 76), "high": (62, 84)}
     hooks = []
     for i in range(5):
-        events = sample_rhythm(histogram, density=density, syncopation=sync, seed=i)
-        notes = assign_pitches(events, scale=scale, register=reg_map[register], seed=i)
+        events = sample_rhythm(histogram, density=density, syncopation=sync, seed=base_seed + i)
+        notes = assign_pitches(events, scale=scale, register=reg_map[register], seed=base_seed + i)
         hooks.append(notes)
+
+    combined_wav = hooks_to_wav_bytes(hooks, bpm=bpm)
 
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w") as zf:
         for i, notes in enumerate(hooks, 1):
             wav_bytes = notes_to_wav_bytes(notes, bpm=bpm)
             zf.writestr(f"hook_{i}.wav", wav_bytes)
-        zf.writestr("hooks_combined.wav", hooks_to_wav_bytes(hooks, bpm=bpm))
+        zf.writestr("hooks_combined.wav", combined_wav)
+
+    st.audio(combined_wav, format="audio/wav")
 
     download_name = build_zip_name(uploaded_name)
     st.download_button(

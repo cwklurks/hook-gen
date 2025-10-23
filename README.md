@@ -25,6 +25,8 @@ A Streamlit front-end around the hook-gen model: drop in a loop, get five melodi
 - 🎚️ Three quick voicing registers (`low`, `mid`, `high`) so you can revoice hooks without tweaking code.
 - 📦 Download bundle named after the uploaded file, ready to drag-drop into a DAW session.
 - 🎬 Demo playbook plus synthetic audio assets so you can rehearse offline.
+- ♻️ One-click regenerate button to audition fresh rhythmic and pitch variations without re-uploading.
+- 🔉 Inline audio preview lets you hear the combined hook mix before committing to a download.
 
 ## Live Demo Flow
 If you're showing this project, open `DEMO_PLAYBOOK.md` for a timed script. The short version:
@@ -111,7 +113,7 @@ hook-aid/
 ## Roadmap
 - 🎹 Optional MIDI export in the UI (already available in `export.py`).
 - 🎛️ Presets for "chill", "busy", or "syncopated" settings to speed up live tweaking.
-- 🔊 In-app audio preview before download.
+- 🧠 Save favorite slider combinations as recallable presets.
 
 ## Contributing
 Issues and pull requests are welcome. 🤝 If you introduce new example loops, include a short description or clip so others can regression-test by ear.

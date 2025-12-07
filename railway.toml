@@ -1,6 +1,6 @@
 [build]
-# Use the root Dockerfile (multi-stage build with frontend + backend)
-dockerfilePath = "Dockerfile"
+# Use the backend Dockerfile (API only)
+dockerfilePath = "backend/Dockerfile"
 
 [deploy]
 # Health check endpoint

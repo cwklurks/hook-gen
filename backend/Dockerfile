@@ -1,5 +1,5 @@
-# Local development Dockerfile (backend only)
-# For production, use the root Dockerfile instead
+# Backend API Dockerfile
+# Deploy to Render.com or any Docker-compatible platform
 FROM python:3.10-slim
 
 WORKDIR /app

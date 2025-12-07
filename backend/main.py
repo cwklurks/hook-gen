@@ -6,8 +6,8 @@ app = FastAPI(title="Hook-Gen API", version="2.0.0")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",  # Allow any http/https origin
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

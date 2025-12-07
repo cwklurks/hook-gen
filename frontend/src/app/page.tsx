@@ -64,10 +64,9 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
+      // Use local API proxy
       try {
-        const res = await fetch(`${apiUrl}/analyze`, {
+        const res = await fetch("/api/analyze", {
           method: "POST",
           body: formData,
         });
@@ -94,10 +93,9 @@ export default function Home() {
     if (!analysis) return;
     setIsGenerating(true);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
     try {
-      const res = await fetch(`${apiUrl}/generate`, {
+      // Use local API proxy
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

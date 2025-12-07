@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 # Configuration constants
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
-AUDIO_PROCESSING_TIMEOUT_SECONDS = 60  # 60 seconds timeout for audio processing
+AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processing
+MAX_AUDIO_DURATION_SECONDS = 30  # Only analyze first 30 seconds (enough for BPM/scale)
 
 # Allowed content types and file extensions
 ALLOWED_CONTENT_TYPES = {
@@ -132,10 +133,11 @@ async def analyze_audio(file: UploadFile = File(...)):
         # Wrap audio processing in a timeout to prevent hangs
         async def process_audio():
             # Run librosa.load in executor since it's CPU-bound
+            # Only load first N seconds for faster processing
             loop = asyncio.get_event_loop()
             audio_array, sample_rate = await loop.run_in_executor(
                 None,
-                lambda: librosa.load(buffer, sr=22050, mono=True)
+                lambda: librosa.load(buffer, sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
             )
             
             # Process audio analysis

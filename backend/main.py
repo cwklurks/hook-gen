@@ -37,11 +37,11 @@ def on_startup():
     logger.info("Application started successfully")
 
 # Health check / root endpoint
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {"message": "Hook-Gen API is running", "version": "2.0.0"}
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok"}
 

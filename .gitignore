@@ -3,3 +3,27 @@
 __pycache__/
 outputs/
 *.pyc
+
+# Node.js
+node_modules/
+.next/
+
+# Database files
+*.db
+
+# Generated files
+*.mid
+*.zip
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build artifacts
+dist/
+build/

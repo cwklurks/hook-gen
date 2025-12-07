@@ -1,0 +1,10 @@
+__pycache__
+sessions.db
+.git
+.DS_Store
+venv
+.env
+__init__.py
+README.md
+
+

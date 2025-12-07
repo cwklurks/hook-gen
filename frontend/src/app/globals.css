@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+:root {
+  /* Minimal Dark Theme Palette */
+  --background: #050505;
+  --foreground: #fafafa;
+  
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(255, 255, 255, 0.08);
+  
+  --primary: #fafafa;
+  --secondary: #525252;
+  --accent: #6366f1; /* Subtle Indigo */
+  
+  --font-sans: var(--font-outfit);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Minimal Utilities */
+.glass-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.minimal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.minimal-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.minimal-button {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--foreground);
+  transition: all 0.2s ease;
+}
+
+.minimal-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--foreground);
+}
+
+.minimal-input {
+  background: transparent;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--foreground);
+  transition: border-color 0.2s ease;
+}
+
+.minimal-input:focus {
+  border-color: var(--foreground);
+  outline: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+/* Hide Next.js badge */
+#__next-build-watcher,
+[data-nextjs-dialog],
+[data-nextjs-toast] {
+  display: none !important;
+}

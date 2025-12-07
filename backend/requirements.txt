@@ -1,0 +1,10 @@
+streamlit
+librosa
+soundfile
+numpy
+pretty_midi
+mido
+fastapi
+uvicorn
+python-multipart
+pydantic

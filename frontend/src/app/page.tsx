@@ -64,9 +64,11 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
-      // Use local API proxy
+      // Direct fetch to Railway to avoid Vercel timeouts
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
       try {
-        const res = await fetch("/api/analyze", {
+        const res = await fetch(`${baseUrl}/analyze`, {
           method: "POST",
           body: formData,
         });
@@ -93,9 +95,11 @@ export default function Home() {
     if (!analysis) return;
     setIsGenerating(true);
 
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
     try {
-      // Use local API proxy
-      const res = await fetch("/api/generate", {
+      // Direct fetch to Railway
+      const res = await fetch(`${baseUrl}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

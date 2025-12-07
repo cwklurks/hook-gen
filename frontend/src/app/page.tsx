@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Music, Sliders, Activity, Zap, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, Music, Sliders, Activity, Zap, ArrowRight } from "lucide-react";
 import Waveform from "@/components/Waveform";
 import PianoRoll from "@/components/PianoRoll";
 import SynthPlayer from "@/components/SynthPlayer";
 import SoundWaveBackground from "@/components/SoundWaveBackground";
+
+// API base URL: use env var for local dev, empty string for production (same origin)
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface AnalysisResult {
   bpm: number;
@@ -38,25 +41,6 @@ export default function Home() {
   const [selectedHookIndex, setSelectedHookIndex] = useState(0);
   const [currentBeat, setCurrentBeat] = useState<number | undefined>(undefined);
   const seekRef = useRef<((beat: number) => void) | null>(null);
-  const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
-
-  useEffect(() => {
-    const checkHealth = async () => {
-      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
-      try {
-        const res = await fetch(`${baseUrl}/?t=${Date.now()}`);
-        if (res.ok) {
-          setBackendStatus("online");
-        } else {
-          setBackendStatus("offline");
-        }
-      } catch (e) {
-        console.error("Backend Health Check Failed:", e);
-        setBackendStatus("offline");
-      }
-    };
-    checkHealth();
-  }, []);
 
   const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
 
@@ -83,11 +67,9 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
-      // Direct fetch to Railway to avoid Vercel timeouts
-      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
-
       try {
-        const res = await fetch(`${baseUrl}/analyze?t=${Date.now()}`, {
+        // Use API_BASE for local dev, empty for production (same origin)
+        const res = await fetch(`${API_BASE}/analyze`, {
           method: "POST",
           body: formData,
         });
@@ -114,11 +96,9 @@ export default function Home() {
     if (!analysis) return;
     setIsGenerating(true);
 
-    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
-
     try {
-      // Direct fetch to Railway
-      const res = await fetch(`${baseUrl}/generate?t=${Date.now()}`, {
+      // Use API_BASE for local dev, empty for production (same origin)
+      const res = await fetch(`${API_BASE}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,12 +140,6 @@ export default function Home() {
           <h1 className="text-6xl md:text-8xl font-light tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
             Hook<span className="font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-400">Gen</span>
           </h1>
-
-          <div className="flex justify-center items-center gap-2 text-sm">
-            {backendStatus === "checking" && <span className="text-neutral-500">Connecting to server...</span>}
-            {backendStatus === "online" && <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 size={14} /> Server Online</span>}
-            {backendStatus === "offline" && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={14} /> Server Offline</span>}
-          </div>
 
           <p className="text-neutral-400 text-lg max-w-lg mx-auto font-light leading-relaxed tracking-wide">
             <strong className="text-neutral-200">Generate melodies that lock to your beat.</strong>

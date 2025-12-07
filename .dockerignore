@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+
+# Node
+**/node_modules
+**/.next
+**/out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local files
+*.db
+outputs/
+hook-aid/
+
+# Docs
+*.md
+!README.md
+
+# Docker
+docker-compose.yml
+

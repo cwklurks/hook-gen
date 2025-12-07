@@ -1,4 +1,5 @@
 services:
+  # Local development: run backend and frontend separately
   backend:
     build: ./backend
     ports:
@@ -16,6 +17,20 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      # For local dev, frontend calls backend directly via browser
+      # This requires CORS on backend for local dev
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
+
+  # Production-like: single container with both
+  production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    profiles:
+      - production

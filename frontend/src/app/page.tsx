@@ -265,41 +265,41 @@ export default function Home() {
         <Github size={18} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
       </a>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 flex flex-col gap-24">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 flex flex-col gap-12">
 
         {/* Hero Section */}
         <motion.header
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center space-y-6 relative"
+          className="text-center space-y-4 relative"
         >
           {/* Ambient Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-indigo-500/20 rounded-full blur-[120px] -z-10 pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] -z-10 pointer-events-none" />
 
-          <h1 className="text-6xl md:text-8xl font-light tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
+          <h1 className="text-5xl md:text-7xl font-light tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
             Hook<span className="font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-400">Gen</span>
           </h1>
 
-          <p className="text-neutral-400 text-lg max-w-lg mx-auto font-light leading-relaxed tracking-wide">
+          <p className="text-neutral-400 text-base md:text-lg max-w-lg mx-auto font-light leading-relaxed tracking-wide">
             <strong className="text-neutral-200">Generate melodies that lock to your beat.</strong>
             <br />Upload a loop to begin.
           </p>
         </motion.header>
 
         {/* Main Workflow */}
-        <div className="space-y-12">
+        <div className="space-y-8">
 
           {/* Upload & Analysis */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch"
           >
             {/* Upload Area */}
-            <div className="space-y-6">
-              <div className={`group relative h-48 rounded-sm border bg-white/[0.02] hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50" : "border-white/10 hover:border-white/20"}`}>
+            <div className="flex flex-col gap-6 p-6 rounded-lg border border-white/10 bg-white/[0.02] h-full">
+              <div className={`flex-1 group relative min-h-[200px] rounded-md border-2 border-dashed transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}>
                 <input
                   type="file"
                   onChange={handleFileUpload}
@@ -321,7 +321,7 @@ export default function Home() {
               </div>
 
               {/* Example Files */}
-              <div className="space-y-4 pt-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-3 text-neutral-500 text-xs uppercase tracking-widest">
                   <div className="h-px flex-1 bg-white/10"></div>
                   <span className="flex items-center gap-2">
@@ -332,30 +332,27 @@ export default function Home() {
                 </div>
                 
                 {examples.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
                     {examples.map((example) => (
                       <button
                         key={example.filename}
                         onClick={() => handleExampleSelect(example)}
                         disabled={isAnalyzing}
-                        className={`group relative p-3 text-left rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
+                        className={`group relative p-2 text-left rounded-md border transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
                           selectedExample === example.filename
                             ? "bg-white/10 border-white/30 text-white"
                             : "bg-white/[0.02] border-white/5 text-neutral-400 hover:bg-white/[0.05] hover:border-white/10 hover:text-neutral-200"
                         }`}
                       >
-                        <div className="flex justify-between items-start mb-1">
+                        <div className="flex justify-between items-start mb-0.5">
                            <div className="font-medium truncate text-xs">{example.name}</div>
                            {selectedExample === example.filename && (
                              <Activity size={10} className="text-emerald-400 animate-pulse" />
                            )}
                         </div>
-                        <div className="text-neutral-600 text-[10px] leading-tight line-clamp-2 group-hover:text-neutral-500 transition-colors">
+                        <div className="text-neutral-600 text-[10px] leading-tight line-clamp-1 group-hover:text-neutral-500 transition-colors">
                           {example.description}
                         </div>
-                        
-                        {/* Hover accent */}
-                        <div className="absolute bottom-0 left-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent w-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                       </button>
                     ))}
                   </div>
@@ -368,7 +365,7 @@ export default function Home() {
             </div>
 
             {/* Analysis Display */}
-            <div className="h-64 rounded-sm border border-white/10 bg-white/[0.02] p-8 flex flex-col justify-center relative overflow-hidden">
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-8 flex flex-col justify-center relative overflow-hidden h-full min-h-[300px]">
               {isAnalyzing ? (
                 <AnalysisProgress
                   progress={analysisProgress.progress}
@@ -421,14 +418,14 @@ export default function Home() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="space-y-8 pt-12 border-t border-white/10"
+                className="space-y-6 pt-8 border-t border-white/10"
               >
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-3 mb-6">
                   <Sliders size={20} className="text-neutral-500" />
                   <h2 className="text-xl font-light text-white tracking-wide">Generator Settings</h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
                       <label className="text-neutral-400">Density</label>
@@ -472,7 +469,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-8">
+                <div className="flex justify-end pt-4">
                   <button
                     onClick={handleGenerate}
                     disabled={isGenerating}
@@ -495,14 +492,14 @@ export default function Home() {
               <motion.section
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="pt-12 border-t border-white/10 pb-24"
+                className="pt-8 border-t border-white/10 pb-12"
               >
-                <div className="flex items-center gap-4 mb-12">
+                <div className="flex items-center gap-4 mb-8">
                   <Zap size={20} className="text-neutral-500" />
                   <h2 className="text-xl font-light text-white tracking-wide">Output</h2>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[500px]">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[500px]">
                   {/* List */}
                   <div className="lg:col-span-3 flex flex-col gap-2 overflow-y-auto pr-2 custom-scrollbar">
                     {generatedHooks.map((_, i) => (

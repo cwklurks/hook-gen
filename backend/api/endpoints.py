@@ -106,7 +106,7 @@ class AnalysisResponse(BaseModel):
 class GenerateRequest(BaseModel):
     bpm: float = Field(gt=0, le=300)
     scale: str
-    density: int = Field(ge=1, le=10)
+    density: int = Field(ge=1, le=16)
     syncopation: float = Field(ge=0.0, le=1.0)
     pitch_register: Literal["low", "mid", "high"]
     histogram: List[float] = Field(min_items=16, max_items=16)

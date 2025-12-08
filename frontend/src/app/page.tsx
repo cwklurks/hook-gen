@@ -217,11 +217,27 @@ export default function Home() {
           seed: Math.floor(Math.random() * 10000),
         }),
       });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: "Generation failed" }));
+        console.error("Generation error:", errorData);
+        setUploadError(errorData.detail || "Failed to generate hooks. Please try again.");
+        return;
+      }
+      
       const data = await res.json();
+      if (!data.hooks || !Array.isArray(data.hooks)) {
+        console.error("Invalid response format:", data);
+        setUploadError("Received invalid data from server. Please try again.");
+        return;
+      }
+      
       setGeneratedHooks(data.hooks);
       setSelectedHookIndex(0);
+      setUploadError(null);
     } catch (err) {
       console.error("Generation failed", err);
+      setUploadError("Failed to connect to the server. Please try again.");
     } finally {
       setIsGenerating(false);
     }

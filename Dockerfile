@@ -14,7 +14,11 @@ WORKDIR /app
 # Install system dependencies for audio processing
 RUN apt-get update && apt-get install -y \
     libsndfile1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy shared package first
+COPY packages/hookgen_core /packages/hookgen_core
 
 # Install Python dependencies
 COPY backend/requirements.txt .
@@ -27,6 +31,10 @@ COPY backend/ .
 COPY --from=frontend /frontend/out ./static
 
 # Run the server
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
 CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
 
 

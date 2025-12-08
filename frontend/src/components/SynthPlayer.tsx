@@ -5,270 +5,280 @@ import * as Tone from "tone";
 import { Play, Square, Settings2, Download } from "lucide-react";
 
 interface Note {
-    pitch: number;
-    start: number; // in beats
-    duration: number; // in beats
-    velocity: number;
+  pitch: number;
+  start: number; // in beats
+  duration: number; // in beats
+  velocity: number;
 }
 
 interface SynthPlayerProps {
-    notes: Note[];
-    bpm: number;
-    onPlayheadUpdate?: (beat: number | undefined) => void;
-    onSeekRef?: React.MutableRefObject<((beat: number) => void) | null>; // Ref to expose seek function
+  notes: Note[];
+  bpm: number;
+  onPlayheadUpdate?: (beat: number | undefined) => void;
+  onSeekRef?: React.MutableRefObject<((beat: number) => void) | null>; // Ref to expose seek function
 }
 
 export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef }: SynthPlayerProps) {
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [preset, setPreset] = useState("pluck");
-    const synthRef = useRef<Tone.PolySynth | null>(null);
-    const partRef = useRef<Tone.Part | null>(null);
-    const animationFrameRef = useRef<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [preset, setPreset] = useState("pluck");
+  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const partRef = useRef<Tone.Part | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-    // Expose seek function via ref
-    const seekToBeat = (beat: number) => {
-        // Clamp beat to 0-16 range
-        const clampedBeat = Math.max(0, Math.min(16, beat));
+  // Expose seek function via ref
+  const seekToBeat = (beat: number) => {
+    // Clamp beat to 0-16 range
+    const clampedBeat = Math.max(0, Math.min(16, beat));
 
-        // Convert beat to Tone.js time format: "bars:quarters:sixteenths"
-        const bar = Math.floor(clampedBeat / 4);
-        const beatInBar = clampedBeat % 4;
-        const quarter = Math.floor(beatInBar);
-        const sixteenth = Math.round((beatInBar - quarter) * 4);
+    // Convert beat to Tone.js time format: "bars:quarters:sixteenths"
+    const bar = Math.floor(clampedBeat / 4);
+    const beatInBar = clampedBeat % 4;
+    const quarter = Math.floor(beatInBar);
+    const sixteenth = Math.round((beatInBar - quarter) * 4);
 
-        const timeString = `${bar}:${quarter}:${sixteenth}`;
-        Tone.Transport.position = timeString;
+    const timeString = `${bar}:${quarter}:${sixteenth}`;
+    Tone.Transport.position = timeString;
 
-        // Update playhead immediately
-        if (onPlayheadUpdate) {
-            onPlayheadUpdate(clampedBeat);
-        }
+    // Update playhead immediately
+    if (onPlayheadUpdate) {
+      onPlayheadUpdate(clampedBeat);
+    }
+  };
+
+  useEffect(() => {
+    if (onSeekRef) {
+      onSeekRef.current = seekToBeat;
+    }
+    return () => {
+      if (onSeekRef) {
+        onSeekRef.current = null;
+      }
     };
+  }, [onSeekRef, onPlayheadUpdate]);
 
-    useEffect(() => {
-        if (onSeekRef) {
-            onSeekRef.current = seekToBeat;
-        }
-        return () => {
-            if (onSeekRef) {
-                onSeekRef.current = null;
-            }
-        };
-    }, [onSeekRef, onPlayheadUpdate]);
+  useEffect(() => {
+    // Initialize synth
+    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+    synthRef.current = synth;
 
-    useEffect(() => {
-        // Initialize synth
-        const synth = new Tone.PolySynth(Tone.Synth).toDestination();
-        synthRef.current = synth;
+    return () => {
+      synth.dispose();
+      partRef.current?.dispose();
+    };
+  }, []);
 
-        return () => {
-            synth.dispose();
-            partRef.current?.dispose();
-        };
-    }, []);
+  useEffect(() => {
+    if (!synthRef.current) return;
 
-    useEffect(() => {
-        if (!synthRef.current) return;
+    // Apply presets
+    const synth = synthRef.current;
+    synth.releaseAll();
 
-        // Apply presets
-        const synth = synthRef.current;
-        synth.releaseAll();
+    if (preset === "pluck") {
+      synth.set({
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 },
+      });
+    } else if (preset === "bass") {
+      synth.set({
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0.8, release: 0.5 },
+      });
+    } else if (preset === "lead") {
+      synth.set({
+        oscillator: { type: "square" },
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 },
+      });
+    }
+  }, [preset]);
 
-        if (preset === "pluck") {
-            synth.set({
-                oscillator: { type: "triangle" },
-                envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 },
-            });
-        } else if (preset === "bass") {
-            synth.set({
-                oscillator: { type: "sawtooth" },
-                envelope: { attack: 0.01, decay: 0.2, sustain: 0.8, release: 0.5 },
-            });
-        } else if (preset === "lead") {
-            synth.set({
-                oscillator: { type: "square" },
-                envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 },
-            });
-        }
-    }, [preset]);
+  useEffect(() => {
+    if (!notes.length || !synthRef.current) return;
 
-    useEffect(() => {
-        if (!notes.length || !synthRef.current) return;
+    // Stop existing part
+    if (partRef.current) {
+      partRef.current.dispose();
+    }
 
-        // Stop existing part
-        if (partRef.current) {
-            partRef.current.dispose();
-        }
+    // Notes have start in beats (0-16 for 4 bars, 4 beats per bar)
+    // Convert to Tone.js time format: "bars:quarters:sixteenths"
+    const events = notes.map((note) => {
+      const bar = Math.floor(note.start / 4);
+      const beatInBar = note.start % 4;
+      const quarter = Math.floor(beatInBar);
+      const sixteenth = Math.round((beatInBar - quarter) * 4);
 
-        // Notes have start in beats (0-16 for 4 bars, 4 beats per bar)
-        // Convert to Tone.js time format: "bars:quarters:sixteenths"
-        const events = notes.map((note) => {
-            const bar = Math.floor(note.start / 4);
-            const beatInBar = note.start % 4;
-            const quarter = Math.floor(beatInBar);
-            const sixteenth = Math.round((beatInBar - quarter) * 4);
+      // Duration in beats → convert to notation (quarter notes)
+      const durationInQuarters = note.duration;
+      const durationNotation = `0:${durationInQuarters}:0`;
 
-            // Duration in beats → convert to notation (quarter notes)
-            const durationInQuarters = note.duration;
-            const durationNotation = `0:${durationInQuarters}:0`;
+      return {
+        time: `${bar}:${quarter}:${sixteenth}`,
+        note: Tone.Frequency(note.pitch, "midi").toNote(),
+        duration: durationNotation,
+        velocity: note.velocity / 127,
+      };
+    });
 
-            return {
-                time: `${bar}:${quarter}:${sixteenth}`,
-                note: Tone.Frequency(note.pitch, "midi").toNote(),
-                duration: durationNotation,
-                velocity: note.velocity / 127,
-            };
-        });
+    // Create new Part
+    const part = new Tone.Part((time, value) => {
+      synthRef.current?.triggerAttackRelease(value.note, value.duration, time, value.velocity);
+    }, events).start(0);
 
-        // Create new Part
-        const part = new Tone.Part((time, value) => {
-            synthRef.current?.triggerAttackRelease(
-                value.note,
-                value.duration,
-                time,
-                value.velocity
-            );
-        }, events).start(0);
+    part.loop = true;
+    part.loopEnd = "4m"; // 4 measures loop
+    partRef.current = part;
 
-        part.loop = true;
-        part.loopEnd = "4m"; // 4 measures loop
-        partRef.current = part;
+    Tone.Transport.bpm.value = bpm;
+  }, [notes, bpm]);
 
-        Tone.Transport.bpm.value = bpm;
+  // Track playhead position
+  useEffect(() => {
+    if (!isPlaying || !onPlayheadUpdate) {
+      return;
+    }
 
-    }, [notes, bpm]);
+    const updatePlayhead = () => {
+      // Check if transport is still playing
+      if (Tone.Transport.state === "started") {
+        // Get current transport position in beats
+        // Transport position is in "bars:quarters:sixteenths" format
+        const position = Tone.Transport.position as string;
+        const parts = position.split(":").map(Number);
+        const bars = parts[0] ?? 0;
+        const quarters = parts[1] ?? 0;
+        const sixteenths = parts[2] ?? 0;
 
-    // Track playhead position
-    useEffect(() => {
-        if (!isPlaying || !onPlayheadUpdate) {
-            return;
-        }
+        // Convert to total beats (4 beats per bar)
+        const totalBeats = bars * 4 + quarters + sixteenths / 4;
 
-        const updatePlayhead = () => {
-            // Check if transport is still playing
-            if (Tone.Transport.state === "started") {
-                // Get current transport position in beats
-                // Transport position is in "bars:quarters:sixteenths" format
-                const position = Tone.Transport.position as string;
-                const [bars, quarters, sixteenths] = position.split(":").map(Number);
+        // Loop is 4 bars = 16 beats, so wrap around
+        const beatPosition = totalBeats % 16;
 
-                // Convert to total beats (4 beats per bar)
-                const totalBeats = (bars * 4) + quarters + (sixteenths / 4);
-
-                // Loop is 4 bars = 16 beats, so wrap around
-                const beatPosition = totalBeats % 16;
-
-                onPlayheadUpdate(beatPosition);
-
-                animationFrameRef.current = requestAnimationFrame(updatePlayhead);
-            }
-        };
+        onPlayheadUpdate(beatPosition);
 
         animationFrameRef.current = requestAnimationFrame(updatePlayhead);
-
-        return () => {
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
-        };
-    }, [isPlaying, onPlayheadUpdate]);
-
-    const togglePlay = async () => {
-        await Tone.start();
-
-        if (isPlaying) {
-            Tone.Transport.stop();
-            setIsPlaying(false);
-            if (onPlayheadUpdate) {
-                onPlayheadUpdate(undefined); // Hide playhead when stopped
-            }
-        } else {
-            Tone.Transport.start();
-            setIsPlaying(true);
-        }
+      }
     };
 
-    const downloadMidi = async () => {
-        try {
-            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-            const res = await fetch(`${API_BASE}/export/midi`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ notes, bpm }),
-            });
+    animationFrameRef.current = requestAnimationFrame(updatePlayhead);
 
-            if (!res.ok) {
-                const errorText = await res.text();
-                throw new Error(`Export failed: ${res.status} ${res.statusText} - ${errorText}`);
-            }
-
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "hook.mid";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            console.error("MIDI download failed:", err);
-        }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
+  }, [isPlaying, onPlayheadUpdate]);
 
-    return (
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-                <button
-                    onClick={togglePlay}
-                    className={`flex items-center gap-3 px-6 py-3 rounded-sm font-medium text-sm tracking-wide transition-all border ${isPlaying
-                        ? "bg-white/10 text-white border-white/20"
-                        : "bg-white text-black border-white hover:bg-neutral-200"
-                        }`}
-                >
-                    {isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-                    {isPlaying ? "STOP" : "PLAY HOOK"}
-                </button>
+  const togglePlay = async () => {
+    await Tone.start();
 
-                <button
-                    onClick={downloadMidi}
-                    className="flex items-center gap-3 px-6 py-3 rounded-sm font-medium text-sm tracking-wide transition-all border border-white/20 bg-white/5 text-white hover:bg-white/10"
-                >
-                    <Download size={16} />
-                    MIDI
-                </button>
+    if (isPlaying) {
+      Tone.Transport.stop();
+      setIsPlaying(false);
+      if (onPlayheadUpdate) {
+        onPlayheadUpdate(undefined); // Hide playhead when stopped
+      }
+    } else {
+      Tone.Transport.start();
+      setIsPlaying(true);
+    }
+  };
 
-                {isPlaying && (
-                    <div className="flex gap-1 h-6 items-end">
-                        {[...Array(5)].map((_, i) => (
-                            <div
-                                key={i}
-                                className="w-0.5 bg-white rounded-full animate-pulse"
-                                style={{
-                                    height: `${Math.random() * 100}%`,
-                                    animationDelay: `${i * 0.1}s`
-                                }}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
+  const downloadMidi = async () => {
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const res = await fetch(`${API_BASE}/export/midi`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes, bpm }),
+      });
 
-            <div className="flex items-center gap-4 px-4 py-2 border-l border-white/10">
-                <Settings2 size={16} className="text-neutral-500" />
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-neutral-500 font-medium uppercase tracking-wider">Patch</label>
-                    <select
-                        value={preset}
-                        onChange={(e) => setPreset(e.target.value)}
-                        className="bg-transparent text-white text-sm outline-none cursor-pointer hover:text-neutral-300 transition-colors appearance-none"
-                    >
-                        <option value="pluck" className="bg-black text-white">Pluck</option>
-                        <option value="bass" className="bg-black text-white">80s Bass</option>
-                        <option value="lead" className="bg-black text-white">Square Lead</option>
-                    </select>
-                </div>
-            </div>
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Export failed: ${res.status} ${res.statusText} - ${errorText}`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hook.mid";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("MIDI download failed:", err);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={togglePlay}
+          className={`flex items-center gap-3 rounded-sm border px-6 py-3 text-sm font-medium tracking-wide transition-all ${
+            isPlaying
+              ? "border-white/20 bg-white/10 text-white"
+              : "border-white bg-white text-black hover:bg-neutral-200"
+          }`}
+        >
+          {isPlaying ? (
+            <Square size={16} fill="currentColor" />
+          ) : (
+            <Play size={16} fill="currentColor" />
+          )}
+          {isPlaying ? "STOP" : "PLAY HOOK"}
+        </button>
+
+        <button
+          onClick={downloadMidi}
+          className="flex items-center gap-3 rounded-sm border border-white/20 bg-white/5 px-6 py-3 text-sm font-medium tracking-wide text-white transition-all hover:bg-white/10"
+        >
+          <Download size={16} />
+          MIDI
+        </button>
+
+        {isPlaying && (
+          <div className="flex h-6 items-end gap-1">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="w-0.5 animate-pulse rounded-full bg-white"
+                style={{
+                  height: `${Math.random() * 100}%`,
+                  animationDelay: `${i * 0.1}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4 border-l border-white/10 px-4 py-2">
+        <Settings2 size={16} className="text-neutral-500" />
+        <div className="flex flex-col">
+          <label className="text-[10px] font-medium tracking-wider text-neutral-500 uppercase">
+            Patch
+          </label>
+          <select
+            value={preset}
+            onChange={(e) => setPreset(e.target.value)}
+            className="cursor-pointer appearance-none bg-transparent text-sm text-white transition-colors outline-none hover:text-neutral-300"
+          >
+            <option value="pluck" className="bg-black text-white">
+              Pluck
+            </option>
+            <option value="bass" className="bg-black text-white">
+              80s Bass
+            </option>
+            <option value="lead" className="bg-black text-white">
+              Square Lead
+            </option>
+          </select>
         </div>
-    );
+      </div>
+    </div>
+  );
 }

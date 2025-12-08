@@ -7,7 +7,6 @@ if str(ROOT) not in sys.path:
 
 import numpy as np
 import pytest
-
 from motif import detect_scale_from_audio
 from ui_helpers import build_zip_name
 

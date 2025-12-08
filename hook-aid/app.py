@@ -5,12 +5,18 @@ from typing import Optional
 import librosa
 import numpy as np
 import streamlit as st
-
-from rhythm import estimate_bpm_and_beats, ticks_from_beats, groove_histogram
-from motif import sample_rhythm, assign_pitches, list_available_scales, detect_scale_from_audio
-from export import notes_to_wav_bytes, hooks_to_wav_bytes
-from ui_helpers import build_zip_name
-
+from hookgen_core import (
+    assign_pitches,
+    build_zip_name,
+    detect_scale_from_audio,
+    estimate_bpm_and_beats,
+    groove_histogram,
+    hooks_to_wav_bytes,
+    list_available_scales,
+    notes_to_wav_bytes,
+    sample_rhythm,
+    ticks_from_beats,
+)
 
 st.set_page_config(page_title="Hook Generator Aid", layout="centered")
 st.title("Hook Generator Aid")

@@ -9,11 +9,19 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libsndfile1 \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy shared package first
+COPY ../packages/hookgen_core /packages/hookgen_core
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

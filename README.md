@@ -1,119 +1,199 @@
-# Hook Generator Aid
+<div align="center">
 
-[![Streamlit](https://img.shields.io/badge/Streamlit-ready-ff4b4b.svg)](https://streamlit.io/) [![Python](https://img.shields.io/badge/python-3.10+-3776ab.svg)](https://www.python.org/)
+# Hook-Gen
 
-A Streamlit front-end around the hook-gen model: drop in a loop, get five melodic hooks that line up with the groove and the key. 🎶 Built for quick ideation sessions, perfect for tomorrow's demo.
+**Turn any drum loop into five melodic hooks that lock to the groove.**
+
+[![CI](https://github.com/cwklurks/hook-gen/actions/workflows/test.yml/badge.svg)](https://github.com/cwklurks/hook-gen/actions/workflows/test.yml)
+
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6.svg)](https://www.typescriptlang.org/)
+
+[View Demo](https://hook-gen-nine.vercel.app/) • [Report Bug](https://github.com/cwklurks/hook-gen/issues) • [Request Feature](https://github.com/cwklurks/hook-gen/issues)
+
+</div>
 
 ---
 
-## Table of Contents
-- [Highlights](#highlights)
-- [Live Demo Flow](#live-demo-flow)
-- [Quick Start](#quick-start)
-- [Controls at a Glance](#controls-at-a-glance)
-- [Scale Detection](#scale-detection)
-- [Bundled Example Loops](#bundled-example-loops)
-- [Download Contents](#download-contents)
-- [Testing](#testing)
-- [Project Layout](#project-layout)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
+## 📖 About
 
-## Highlights
-- 🎛️ Groove-aware rhythm sampling driven by the uploaded loop's onset histogram.
-- 🎯 Optional scale suggestion through chroma analysis, with a confidence badge and sidebar read-out.
-- 🎚️ Three quick voicing registers (`low`, `mid`, `high`) so you can revoice hooks without tweaking code.
-- 📦 Download bundle named after the uploaded file, ready to drag-drop into a DAW session.
-- 🎬 Demo playbook plus synthetic audio assets so you can rehearse offline.
-- ♻️ One-click regenerate button to audition fresh rhythmic and pitch variations without re-uploading.
-- 🔉 Inline audio preview lets you hear the combined hook mix before committing to a download.
+**Hook-Gen** is a musical ideation engine designed for beatmakers and developers. Unlike "black box" generative AI that relies on massive pre-trained checkpoints, Hook-Gen uses **deterministic, explainable algorithms** to analyze audio and generate musical content.
 
-## Live Demo Flow
-If you're showing this project, open `DEMO_PLAYBOOK.md` for a timed script. The short version:
-1. 🎧 Fire up the app with `streamlit run app.py`.
-2. 🥁 Use `examples/straight_120bpm.wav` to introduce the BPM detection and groove controls.
-3. 🎯 Switch to a pitched loop such as `examples/keys_eminor_100bpm.wav` to highlight the scale badge and override flow.
-4. 📦 Download the archive and mention the auto-named ZIP.
-5. 🎸 Close with `examples/plucks_gmajor_110bpm.wav` to showcase how register swaps change the character.
+Drop in a rhythmic loop (WAV/MP3), and the system analyzes the **onset histogram** (groove) and **chroma features** (key/scale). It then procedurally generates monophonic MIDI/Audio hooks that mathematically lock to your loop's specific feel.
 
-## Quick Start
-⚡ Ready in four commands:
+### Key Features
+
+* **🎛️ Groove-Aware Sampling:** Rhythm generation is driven by the uploaded loop's onset density.
+
+* **🎯 Contextual Pitching:** Automatic scale detection using `librosa` chroma templates.
+
+* **🎹 In-Browser Synthesis:** Instant preview using Tone.js on the frontend.
+
+* **📦 Production Ready:** Downloads organized zip bundles with WAV/MIDI stems.
+
+* **⚡ Lightweight:** Runs entirely on CPU; no GPU required.
+
+---
+
+## 📸 Demo
+
+![Application Demo](docs/demo.gif)
+
+---
+
+## 🛠 Tech Stack
+
+This project uses a modern decoupled architecture:
+
+### **Frontend (The Interface)**
+
+* **Framework:** [Next.js 14](https://nextjs.org/) (React Server Components)
+
+* **Styling:** Tailwind CSS + Framer Motion
+
+* **Audio:** [Wavesurfer.js](https://wavesurfer-js.org/) (Visualization) + [Tone.js](https://tonejs.github.io/) (Playback)
+
+### **Backend (The Brain)**
+
+* **API:** [FastAPI](https://fastapi.tiangolo.com/) (Python)
+
+* **DSP:** [Librosa](https://librosa.org/) (Audio Analysis) + NumPy
+
+* **MIDI:** Mido / PrettyMIDI
+
+---
+
+## 🚀 Quick Start
+
+The easiest way to run Hook-Gen locally is via Docker.
+
+### Prerequisites
+
+* Docker & Docker Compose
+
+### Installation
+
+1.  **Clone the repo**
+
+    ```bash
+
+    git clone https://github.com/cwklurks/hook-gen.git
+
+    cd hook-gen
+
+    ```
+
+2.  **Start the services**
+
+    ```bash
+
+    docker-compose up --build
+
+    ```
+
+3.  **Access the app**
+
+    * Frontend: `http://localhost:3000`
+
+    * Backend API Docs: `http://localhost:8000/docs`
+
+---
+
+## 🧠 How It Works (The Algorithm)
+
+Hook-Gen operates on an "Explainable AI" philosophy. Here is the pipeline:
+
+1.  **Signal Conditioning:** The audio is loaded into `Librosa`, converted to mono, and trimmed.
+
+2.  **Rhythm Extraction:**
+
+    * We calculate an onset envelope to estimate BPM.
+
+    * A 16-step **Groove Histogram** is built by mapping detected onsets to a 16th-note grid.
+
+3.  **Scale Detection:**
+
+    * We generate a Chroma Constant-Q Transform (CQT).
+
+    * This vector is compared against 24 template scales (Major/Minor for all roots) to determine the musical key confidence.
+
+4.  **Generation:**
+
+    * **Rhythm:** We sample from the Groove Histogram (weighted by the "Groove Push" slider).
+
+    * **Pitch:** We perform a constrained random walk within the detected scale, ensuring the phrase resolves to the tonic (root note).
+
+---
+
+## 📂 Project Structure
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-The app launches at `http://localhost:8501`.
 
-## Controls at a Glance
-🎚️ Dial in the feel with these widgets:
+hook-gen/
 
-| Control | Default | What it does |
-| --- | --- | --- |
-| **Notes per bar** | 7 | Sets how many 16th-note events the rhythm sampler pulls from the groove histogram. |
-| **Groove push** | 0.5 | Nudges hits toward off-beats; 0 locks to the grid, 1 leans into syncopation. |
-| **Pitch range** | `mid` | Keeps notes within a register (low/mid/high) so hooks sit where you expect. |
-| **BPM** | Detected value | Appears after upload; tweak it if the automatic tempo guess feels wrong. |
-| **Scale** | Suggested or C minor | Uses chroma detection to pre-select a key; always editable. |
+├── backend/                # Python FastAPI Server
 
-Each slider includes inline help text. A summary of file name, BPM, and scale confidence also lives in the sidebar.
+│   ├── app/
 
-## Scale Detection
-- 🎼 Uses `librosa` chroma templates for every major/minor key.
-- ✅ Confidence ≥ 0.6 → green badge; ≥ 0.4 → amber; anything lower prompts caution.
-- 🥁 Purely percussive loops fall back to "pick a scale manually" so you never get a misleading default.
+│   │   ├── motif.py        # Pitch generation logic
 
-## Bundled Example Loops
-All loops live in `examples/` and are procedurally generated. 🎵
+│   │   ├── rhythm.py       # Tempo & Groove analysis
 
-| File | Style & Use Case | Length |
-| --- | --- | --- |
-| `groove_100bpm.wav` | 1-bar teaser, straight funk pocket | ~2.4s |
-| `groove_100bpm_long.wav` | Extended version for longer auditions | ~38.4s |
-| `shuffle_92bpm.wav` | Swung hats to stress-test shuffle handling | ~2.6s |
-| `straight_120bpm.wav` | Bread-and-butter pop/rock beat | ~24.0s |
-| `reggaeton_96bpm.wav` | Dembow kick pattern with off-beat snares | ~30.0s |
-| `halftime_70bpm.wav` | Sparse halftime groove plus ghost notes | ~41.1s |
-| `brokenbeat_128bpm.wav` | Busy 16th hats with syncopated kicks | ~22.5s |
-| `fouronthefloor_124bpm.wav` | House-style four-on-the-floor drive | ~23.2s |
-| `keys_eminor_100bpm.wav` | Pad chords with clear E minor tonality | ~28.8s |
-| `bass_cminor_90bpm.wav` | Synth bass riff outlining C minor | ~32.0s |
-| `plucks_gmajor_110bpm.wav` | Plucked pattern outlining G major | ~26.2s |
+│   │   └── export.py       # MIDI/WAV file creation
 
-## Download Contents
-Every render produces a zip named `hooks - <uploaded-file>.zip` containing:
-- 🎶 `hook_1.wav` … `hook_5.wav`
-- 🎧 `hooks_combined.wav`
-You can re-export or extend to MIDI by reusing the helpers in `export.py`.
+│   └── examples/           # Included audio loops for testing
 
-## Testing
-Smoke tests live under `tests/`. ✅
-```bash
-cd hook-aid
-python3 -m pip install pytest  # one-time
-python3 -m pytest tests
-```
-The suite exercises scale detection on synthetic audio and validates the download filename helper.
+│
 
-## Project Layout
-```
-hook-aid/
- ├─ app.py              # Streamlit UI
- ├─ motif.py            # Rhythm + pitch generation utilities
- ├─ rhythm.py           # Tempo detection and groove histogram helpers
- ├─ export.py           # Audio (and MIDI-ready) export helpers
- ├─ examples/           # Drum & melodic loops for demoing
- ├─ ui_helpers.py       # Presentation helpers (download naming, etc.)
- ├─ tests/              # Pytest smoke checks
- ├─ DEMO_PLAYBOOK.md    # Run-of-show cheat sheet
- └─ requirements.txt    # Streamlit + audio stack dependencies
+├── frontend/               # Next.js Application
+
+│   ├── src/components/     # React UI Components (PianoRoll, Waveform)
+
+│   └── public/             # Static assets
+
+│
+
+└── hook-aid/               # Legacy Streamlit Prototype (Reference)
+
 ```
 
-## Roadmap
-- 🎹 Optional MIDI export in the UI (already available in `export.py`).
-- 🎛️ Presets for "chill", "busy", or "syncopated" settings to speed up live tweaking.
-- 🧠 Save favorite slider combinations as recallable presets.
+---
 
-## Contributing
-Issues and pull requests are welcome. 🤝 If you introduce new example loops, include a short description or clip so others can regression-test by ear.
+## 🤝 Contributing
+
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
+
+1. Fork the Project
+
+2. Create your Feature Branch (git checkout -b feature/AmazingFeature)
+
+3. Commit your Changes (git commit -m 'Add some AmazingFeature')
+
+4. Push to the Branch (git push origin feature/AmazingFeature)
+
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See LICENSE for more information.
+
+---
+
+## 🔮 Roadmap
+
+- [ ] MIDI Export UI: Allow downloading .mid files directly from the player.
+
+- [ ] Polyphony: Add chord generation based on implied harmony.
+
+- [ ] Style Presets: Add "Trap", "House", and "Lofi" bias settings to the rhythm sampler.
+
+---
+
+<div align="center"> <small>Built with 🎵 by <a href="https://github.com/cwklurks">cwklurks</a></small> </div>

@@ -1,5 +1,6 @@
 import logging
 import sys
+
 from fastapi import FastAPI, Request, Response
 
 # Configure logging to flush immediately to stdout
@@ -40,10 +41,15 @@ async def cors_handler(request: Request, call_next):
     
     return response
 
-from app.database import init_db
-from app.motif import detect_scale_from_audio
-from app.rhythm import estimate_bpm_and_beats, groove_histogram, ticks_from_beats
 import numpy as np
+from app.database import init_db
+from hookgen_core import (
+    detect_scale_from_audio,
+    estimate_bpm_and_beats,
+    groove_histogram,
+    ticks_from_beats,
+)
+
 
 @app.on_event("startup")
 def on_startup():
@@ -81,4 +87,5 @@ async def health():
 
 # Include API routes
 from api import endpoints
+
 app.include_router(endpoints.router)

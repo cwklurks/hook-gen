@@ -7,9 +7,48 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Backend Linting (Ruff)
+        run: |
+          cd backend
+          ruff check .
+
+      - name: Backend Type Checking (Mypy)
+        run: |
+          cd backend
+          mypy .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Frontend Linting
+        run: |
+          cd frontend
+          npm run lint
+
   test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
@@ -21,17 +60,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest mypy
+          pip install pytest
           pip install -r backend/requirements.txt
 
       - name: Run tests
         run: |
-          # Assuming tests are in backend/tests or root tests
-          # For now, let's run pytest on backend/app if tests exist there
-          # or just check imports
           export PYTHONPATH=$PYTHONPATH:$(pwd)/backend
-          pytest backend/tests || echo "No tests found or tests failed"
-
-      - name: Type checking
-        run: |
-          mypy backend/app --ignore-missing-imports
+          pytest

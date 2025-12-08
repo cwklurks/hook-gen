@@ -39,7 +39,6 @@ interface AnalysisProgress {
 }
 
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -49,7 +48,7 @@ export default function Home() {
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress>({
     stage: "validating",
     progress: 0,
-    message: "Starting..."
+    message: "Starting...",
   });
 
   // Example files
@@ -87,7 +86,6 @@ export default function Home() {
     setUploadError(null);
     setSelectedExample(example.filename);
     setIsAnalyzing(true);
-    setFile(null);
     setGeneratedHooks([]);
 
     // Initialize progress
@@ -107,7 +105,7 @@ export default function Home() {
 
       // Simulate intermediate progress during the request
       const progressInterval = setInterval(() => {
-        setAnalysisProgress(prev => {
+        setAnalysisProgress((prev) => {
           if (prev.progress < 85) {
             const stages = [
               { stage: "tempo", progress: 50, message: "Detecting beats..." },
@@ -115,7 +113,7 @@ export default function Home() {
               { stage: "groove", progress: 70, message: "Building rhythm histogram..." },
               { stage: "scale", progress: 80, message: "Detecting musical key..." },
             ];
-            const nextStage = stages.find(s => s.progress > prev.progress);
+            const nextStage = stages.find((s) => s.progress > prev.progress);
             return nextStage || prev;
           }
           return prev;
@@ -139,7 +137,7 @@ export default function Home() {
       setAnalysisProgress({ stage: "complete", progress: 100, message: "Analysis complete!" });
 
       // Small delay to show completion before switching to results
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       setAnalysis(data);
     } catch (err) {
@@ -168,12 +166,15 @@ export default function Home() {
         return;
       }
 
-      setFile(uploadedFile);
       setAudioUrl(URL.createObjectURL(uploadedFile));
 
       // Auto analyze (non-streaming for better compatibility with Render)
       setIsAnalyzing(true);
-      setAnalysisProgress({ stage: "analyzing", progress: 50, message: "Analyzing audio... this may take a moment" });
+      setAnalysisProgress({
+        stage: "analyzing",
+        progress: 50,
+        message: "Analyzing audio... this may take a moment",
+      });
 
       const formData = new FormData();
       formData.append("file", uploadedFile);
@@ -186,9 +187,10 @@ export default function Home() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ detail: "Failed to analyze audio file." }));
+          const errorData = await response
+            .json()
+            .catch(() => ({ detail: "Failed to analyze audio file." }));
           setUploadError(errorData.detail || "Failed to analyze audio file.");
-          setFile(null);
           setAudioUrl(null);
           setIsAnalyzing(false);
           return;
@@ -224,21 +226,21 @@ export default function Home() {
           seed: Math.floor(Math.random() * 10000),
         }),
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: "Generation failed" }));
         console.error("Generation error:", errorData);
         setUploadError(errorData.detail || "Failed to generate hooks. Please try again.");
         return;
       }
-      
+
       const data = await res.json();
       if (!data.hooks || !Array.isArray(data.hooks)) {
         console.error("Invalid response format:", data);
         setUploadError("Received invalid data from server. Please try again.");
         return;
       }
-      
+
       setGeneratedHooks(data.hooks);
       setSelectedHookIndex(0);
       setUploadError(null);
@@ -251,7 +253,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen w-full relative overflow-hidden selection:bg-white/20 selection:text-white">
+    <main className="relative min-h-screen w-full overflow-hidden selection:bg-white/20 selection:text-white">
       <SoundWaveBackground />
 
       {/* GitHub Link */}
@@ -259,70 +261,80 @@ export default function Home() {
         href="https://github.com/cwklurks/hook-gen"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed top-6 right-6 z-50 p-3 rounded-full border border-white/10 bg-white/[0.02] backdrop-blur-sm text-neutral-500 hover:text-white hover:border-white/30 hover:bg-white/[0.05] transition-all duration-300 group"
+        className="group fixed top-6 right-6 z-50 rounded-full border border-white/10 bg-white/[0.02] p-3 text-neutral-500 backdrop-blur-sm transition-all duration-300 hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
         aria-label="View source on GitHub"
       >
-        <Github size={18} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
+        <Github
+          size={18}
+          strokeWidth={1.5}
+          className="transition-transform duration-300 group-hover:scale-110"
+        />
       </a>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 flex flex-col gap-12">
-
+      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-12 px-6 py-12">
         {/* Hero Section */}
         <motion.header
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center space-y-4 relative"
+          className="relative space-y-4 text-center"
         >
           {/* Ambient Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] -z-10 pointer-events-none" />
+          <div className="pointer-events-none absolute top-1/2 left-1/2 -z-10 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/10 blur-[120px]" />
 
-          <h1 className="text-5xl md:text-7xl font-light tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">
-            Hook<span className="font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-neutral-400">Gen</span>
+          <h1 className="bg-gradient-to-b from-white to-white/60 bg-clip-text text-5xl font-light tracking-tighter text-transparent md:text-7xl">
+            Hook
+            <span className="bg-gradient-to-b from-white to-neutral-400 bg-clip-text font-bold text-transparent">
+              Gen
+            </span>
           </h1>
 
-          <p className="text-neutral-400 text-base md:text-lg max-w-lg mx-auto font-light leading-relaxed tracking-wide">
+          <p className="mx-auto max-w-lg text-base leading-relaxed font-light tracking-wide text-neutral-400 md:text-lg">
             <strong className="text-neutral-200">Generate melodies that lock to your beat.</strong>
-            <br />Upload a loop to begin.
+            <br />
+            Upload a loop to begin.
           </p>
         </motion.header>
 
         {/* Main Workflow */}
         <div className="space-y-8">
-
           {/* Upload & Analysis */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch"
+            className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2"
           >
             {/* Upload Area */}
-            <div className="flex flex-col gap-6 p-6 rounded-lg border border-white/10 bg-white/[0.02] h-full">
-              <div className={`flex-1 group relative min-h-[200px] rounded-md border-2 border-dashed transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}>
+            <div className="flex h-full flex-col gap-6 rounded-lg border border-white/10 bg-white/[0.02] p-6">
+              <div
+                className={`group relative min-h-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border-2 border-dashed transition-all ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}
+              >
                 <input
                   type="file"
                   onChange={handleFileUpload}
                   accept=".wav,.mp3,.mp4,.m4a,audio/wav,audio/mpeg,audio/mp4"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                  className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
                 />
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
-                  <div className={`p-4 rounded-full bg-white/5 group-hover:scale-110 transition-transform duration-500 ${uploadError ? "text-red-400" : "text-neutral-400"}`}>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
+                  <div
+                    className={`rounded-full bg-white/5 p-4 transition-transform duration-500 group-hover:scale-110 ${uploadError ? "text-red-400" : "text-neutral-400"}`}
+                  >
                     <Upload size={24} strokeWidth={1.5} />
                   </div>
                   <div className="text-center">
-                    <p className="text-neutral-200 font-medium">Drop Audio File</p>
-                    <p className="text-neutral-500 text-sm mt-1">WAV, MP3, or MP4 • Max 100MB</p>
+                    <p className="font-medium text-neutral-200">Drop Audio File</p>
+                    <p className="mt-1 text-sm text-neutral-500">WAV, MP3, or MP4 • Max 100MB</p>
                   </div>
                   {uploadError && (
-                    <p className="text-red-400 text-sm mt-2 px-4 text-center">{uploadError}</p>
+                    <p className="mt-2 px-4 text-center text-sm text-red-400">{uploadError}</p>
                   )}
                 </div>
               </div>
 
               {/* Example Files */}
               <div className="space-y-3">
-                <div className="flex items-center gap-3 text-neutral-500 text-xs uppercase tracking-widest">
+                <div className="flex items-center gap-3 text-xs tracking-widest text-neutral-500 uppercase">
                   <div className="h-px flex-1 bg-white/10"></div>
                   <span className="flex items-center gap-2">
                     <Disc3 size={12} />
@@ -330,34 +342,34 @@ export default function Home() {
                   </span>
                   <div className="h-px flex-1 bg-white/10"></div>
                 </div>
-                
+
                 {examples.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="custom-scrollbar grid max-h-[140px] grid-cols-2 gap-2 overflow-y-auto pr-1">
                     {examples.map((example) => (
                       <button
                         key={example.filename}
                         onClick={() => handleExampleSelect(example)}
                         disabled={isAnalyzing}
-                        className={`group relative p-2 text-left rounded-md border transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
+                        className={`group relative overflow-hidden rounded-md border p-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedExample === example.filename
-                            ? "bg-white/10 border-white/30 text-white"
-                            : "bg-white/[0.02] border-white/5 text-neutral-400 hover:bg-white/[0.05] hover:border-white/10 hover:text-neutral-200"
+                            ? "border-white/30 bg-white/10 text-white"
+                            : "border-white/5 bg-white/[0.02] text-neutral-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-neutral-200"
                         }`}
                       >
-                        <div className="flex justify-between items-start mb-0.5">
-                           <div className="font-medium truncate text-xs">{example.name}</div>
-                           {selectedExample === example.filename && (
-                             <Activity size={10} className="text-emerald-400 animate-pulse" />
-                           )}
+                        <div className="mb-0.5 flex items-start justify-between">
+                          <div className="truncate text-xs font-medium">{example.name}</div>
+                          {selectedExample === example.filename && (
+                            <Activity size={10} className="animate-pulse text-emerald-400" />
+                          )}
                         </div>
-                        <div className="text-neutral-600 text-[10px] leading-tight line-clamp-1 group-hover:text-neutral-500 transition-colors">
+                        <div className="line-clamp-1 text-[10px] leading-tight text-neutral-600 transition-colors group-hover:text-neutral-500">
                           {example.description}
                         </div>
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center p-4 border border-dashed border-white/10 rounded-sm text-neutral-600 text-xs italic">
+                  <div className="flex items-center justify-center rounded-sm border border-dashed border-white/10 p-4 text-xs text-neutral-600 italic">
                     <div className="animate-pulse">Loading examples...</div>
                   </div>
                 )}
@@ -365,7 +377,7 @@ export default function Home() {
             </div>
 
             {/* Analysis Display */}
-            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-8 flex flex-col justify-center relative overflow-hidden h-full min-h-[300px]">
+            <div className="relative flex h-full min-h-[300px] flex-col justify-center overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] p-8">
               {isAnalyzing ? (
                 <AnalysisProgress
                   progress={analysisProgress.progress}
@@ -373,21 +385,30 @@ export default function Home() {
                   message={analysisProgress.message}
                 />
               ) : analysis ? (
-                <div className="space-y-8 relative z-10">
-                  <div className="flex justify-between items-end border-b border-white/5 pb-4">
-                    <span className="text-neutral-500 text-sm uppercase tracking-widest">Tempo</span>
-                    <span className="text-4xl font-light text-white">{Math.round(analysis.bpm)} <span className="text-sm text-neutral-600">BPM</span></span>
+                <div className="relative z-10 space-y-8">
+                  <div className="flex items-end justify-between border-b border-white/5 pb-4">
+                    <span className="text-sm tracking-widest text-neutral-500 uppercase">
+                      Tempo
+                    </span>
+                    <span className="text-4xl font-light text-white">
+                      {Math.round(analysis.bpm)}{" "}
+                      <span className="text-sm text-neutral-600">BPM</span>
+                    </span>
                   </div>
-                  <div className="flex justify-between items-end">
-                    <span className="text-neutral-500 text-sm uppercase tracking-widest">Key</span>
+                  <div className="flex items-end justify-between">
+                    <span className="text-sm tracking-widest text-neutral-500 uppercase">Key</span>
                     <div className="text-right">
-                      <span className="text-4xl font-light text-white block">{analysis.scale || "Unknown"}</span>
-                      <span className="text-xs text-emerald-500/80">{(analysis.scale_score * 100).toFixed(0)}% Confidence</span>
+                      <span className="block text-4xl font-light text-white">
+                        {analysis.scale || "Unknown"}
+                      </span>
+                      <span className="text-xs text-emerald-500/80">
+                        {(analysis.scale_score * 100).toFixed(0)}% Confidence
+                      </span>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-4 text-neutral-600">
+                <div className="flex h-full flex-col items-center justify-center gap-4 text-neutral-600">
                   <Music size={32} strokeWidth={1} />
                   <span className="text-sm font-light">Waiting for input...</span>
                 </div>
@@ -404,7 +425,7 @@ export default function Home() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-8 rounded-sm border border-white/10 bg-white/[0.02]">
+                <div className="rounded-sm border border-white/10 bg-white/[0.02] p-8">
                   <Waveform audioUrl={audioUrl} />
                 </div>
               </motion.div>
@@ -418,49 +439,61 @@ export default function Home() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="space-y-6 pt-8 border-t border-white/10"
+                className="space-y-6 border-t border-white/10 pt-8"
               >
-                <div className="flex items-center gap-3 mb-6">
+                <div className="mb-6 flex items-center gap-3">
                   <Sliders size={20} className="text-neutral-500" />
-                  <h2 className="text-xl font-light text-white tracking-wide">Generator Settings</h2>
+                  <h2 className="text-xl font-light tracking-wide text-white">
+                    Generator Settings
+                  </h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
                       <label className="text-neutral-400">Density</label>
-                      <span className="text-white font-mono">{density}</span>
+                      <span className="font-mono text-white">{density}</span>
                     </div>
                     <input
-                      type="range" min="4" max="16" value={density}
+                      type="range"
+                      min="4"
+                      max="16"
+                      value={density}
                       onChange={(e) => setDensity(Number(e.target.value))}
-                      className="w-full h-1 bg-neutral-800 rounded-none appearance-none cursor-pointer accent-white hover:accent-neutral-300"
+                      className="h-1 w-full cursor-pointer appearance-none rounded-none bg-neutral-800 accent-white hover:accent-neutral-300"
                     />
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
                       <label className="text-neutral-400">Syncopation</label>
-                      <span className="text-white font-mono">{(syncopation * 100).toFixed(0)}%</span>
+                      <span className="font-mono text-white">
+                        {(syncopation * 100).toFixed(0)}%
+                      </span>
                     </div>
                     <input
-                      type="range" min="0" max="1" step="0.1" value={syncopation}
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={syncopation}
                       onChange={(e) => setSyncopation(Number(e.target.value))}
-                      className="w-full h-1 bg-neutral-800 rounded-none appearance-none cursor-pointer accent-white hover:accent-neutral-300"
+                      className="h-1 w-full cursor-pointer appearance-none rounded-none bg-neutral-800 accent-white hover:accent-neutral-300"
                     />
                   </div>
 
                   <div className="space-y-4">
-                    <label className="text-sm text-neutral-400 block">Register</label>
+                    <label className="block text-sm text-neutral-400">Register</label>
                     <div className="flex gap-2">
                       {["low", "mid", "high"].map((r) => (
                         <button
                           key={r}
                           onClick={() => setRegister(r)}
-                          className={`flex-1 py-2 text-xs uppercase tracking-widest border transition-all ${register === r
-                            ? "bg-white text-black border-white"
-                            : "bg-transparent text-neutral-500 border-neutral-800 hover:border-neutral-600"
-                            }`}
+                          className={`flex-1 border py-2 text-xs tracking-widest uppercase transition-all ${
+                            register === r
+                              ? "border-white bg-white text-black"
+                              : "border-neutral-800 bg-transparent text-neutral-500 hover:border-neutral-600"
+                          }`}
                         >
                           {r}
                         </button>
@@ -473,12 +506,20 @@ export default function Home() {
                   <button
                     onClick={handleGenerate}
                     disabled={isGenerating}
-                    className="group relative px-8 py-4 bg-white text-black font-medium text-sm uppercase tracking-widest hover:bg-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+                    className="group relative flex items-center gap-3 bg-white px-8 py-4 text-sm font-medium tracking-widest text-black uppercase transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isGenerating ? (
-                      <>Processing <Activity size={16} className="animate-spin" /></>
+                      <>
+                        Processing <Activity size={16} className="animate-spin" />
+                      </>
                     ) : (
-                      <>Generate Hooks <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" /></>
+                      <>
+                        Generate Hooks{" "}
+                        <ArrowRight
+                          size={16}
+                          className="transition-transform group-hover:translate-x-1"
+                        />
+                      </>
                     )}
                   </button>
                 </div>
@@ -492,16 +533,16 @@ export default function Home() {
               <motion.section
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="pt-8 border-t border-white/10 pb-12"
+                className="border-t border-white/10 pt-8 pb-12"
               >
-                <div className="flex items-center gap-4 mb-8">
+                <div className="mb-8 flex items-center gap-4">
                   <Zap size={20} className="text-neutral-500" />
-                  <h2 className="text-xl font-light text-white tracking-wide">Output</h2>
+                  <h2 className="text-xl font-light tracking-wide text-white">Output</h2>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[500px]">
+                <div className="grid h-[500px] grid-cols-1 gap-6 lg:grid-cols-12">
                   {/* List */}
-                  <div className="lg:col-span-3 flex flex-col gap-2 overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="custom-scrollbar flex flex-col gap-2 overflow-y-auto pr-2 lg:col-span-3">
                     {generatedHooks.map((_, i) => (
                       <button
                         key={i}
@@ -509,48 +550,54 @@ export default function Home() {
                           setSelectedHookIndex(i);
                           setCurrentBeat(undefined); // Clear playhead when switching hooks
                         }}
-                        className={`w-full text-left px-5 py-4 text-sm transition-all border-l-2 ${selectedHookIndex === i
-                          ? "border-white bg-white/5 text-white"
-                          : "border-transparent text-neutral-500 hover:text-neutral-300 hover:bg-white/[0.02]"
-                          }`}
+                        className={`w-full border-l-2 px-5 py-4 text-left text-sm transition-all ${
+                          selectedHookIndex === i
+                            ? "border-white bg-white/5 text-white"
+                            : "border-transparent text-neutral-500 hover:bg-white/[0.02] hover:text-neutral-300"
+                        }`}
                       >
-                        <div className="flex justify-between items-center">
+                        <div className="flex items-center justify-between">
                           <span>Variation {i + 1}</span>
-                          {selectedHookIndex === i && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
+                          {selectedHookIndex === i && (
+                            <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                          )}
                         </div>
                       </button>
                     ))}
                   </div>
 
                   {/* Visualization */}
-                  <div className="lg:col-span-9 flex flex-col gap-6">
-                    <div className="flex-1 bg-neutral-900/20 border border-white/5 rounded-sm relative overflow-hidden p-4 flex items-center justify-center">
-                      <PianoRoll
-                        notes={generatedHooks[selectedHookIndex]}
-                        height={400}
-                        currentBeat={currentBeat}
-                        onSeek={(beat) => {
-                          if (seekRef.current) {
-                            seekRef.current(beat);
-                          }
-                        }}
-                      />
-                    </div>
+                  <div className="flex flex-col gap-6 lg:col-span-9">
+                    {generatedHooks[selectedHookIndex] && (
+                      <>
+                        <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-sm border border-white/5 bg-neutral-900/20 p-4">
+                          <PianoRoll
+                            notes={generatedHooks[selectedHookIndex]}
+                            height={400}
+                            currentBeat={currentBeat}
+                            onSeek={(beat) => {
+                              if (seekRef.current) {
+                                seekRef.current(beat);
+                              }
+                            }}
+                          />
+                        </div>
 
-                    <div className="bg-neutral-900/20 border border-white/5 rounded-sm p-4">
-                      <SynthPlayer
-                        notes={generatedHooks[selectedHookIndex]}
-                        bpm={analysis?.bpm || 120}
-                        onPlayheadUpdate={setCurrentBeat}
-                        onSeekRef={seekRef}
-                      />
-                    </div>
+                        <div className="rounded-sm border border-white/5 bg-neutral-900/20 p-4">
+                          <SynthPlayer
+                            notes={generatedHooks[selectedHookIndex]}
+                            bpm={analysis?.bpm || 120}
+                            onPlayheadUpdate={setCurrentBeat}
+                            onSeekRef={seekRef}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </motion.section>
             )}
           </AnimatePresence>
-
         </div>
       </div>
     </main>

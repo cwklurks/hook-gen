@@ -1,10 +1,14 @@
+# Core dependencies
+-e ../packages/hookgen_core
+
+# Backend-specific dependencies
 streamlit
-librosa
-soundfile
-numpy
-pretty_midi
-mido
 fastapi
 uvicorn
 python-multipart
 pydantic
+soundfile
+
+# Development dependencies
+ruff
+mypy

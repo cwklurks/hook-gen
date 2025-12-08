@@ -6,9 +6,16 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./packages/hookgen_core:/packages/hookgen_core
       - ./hook-aid/examples:/app/examples:ro
     environment:
       - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
     build: ./frontend
@@ -22,7 +29,8 @@ services:
       # This requires CORS on backend for local dev
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   # Production-like: single container with both
   production:

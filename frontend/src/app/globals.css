@@ -4,14 +4,14 @@
   /* Minimal Dark Theme Palette */
   --background: #050505;
   --foreground: #fafafa;
-  
+
   --card-bg: rgba(255, 255, 255, 0.03);
   --card-border: rgba(255, 255, 255, 0.08);
-  
+
   --primary: #fafafa;
   --secondary: #525252;
   --accent: #6366f1; /* Subtle Indigo */
-  
+
   --font-sans: var(--font-outfit);
 }
 

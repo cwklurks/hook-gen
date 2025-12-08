@@ -1,17 +1,18 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+import asyncio
+import io
+import json
+import logging
+import os
+from math import isclose
+from pathlib import Path
+from typing import List, Literal, Optional
+
+import librosa
+import numpy as np
+import soundfile as sf
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any, Literal
-import io
-import librosa
-import soundfile as sf
-import numpy as np
-from math import isclose
-import logging
-import asyncio
-import os
-import json
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def fast_load_audio(buffer, max_duration=8):
                 audio = audio.mean(axis=1)
                 
             return audio, sr
-    except Exception as e:
+    except Exception:
         # Fallback to librosa for non-WAV formats
         buffer.seek(0)
         return librosa.load(buffer, sr=None, mono=True, duration=max_duration)
@@ -90,10 +91,14 @@ ALLOWED_EXTENSIONS = {
     ".aac",
 }
 
-# Import from the app package
-# Note: This assumes running from backend/ directory or proper python path
-from app.rhythm import estimate_bpm_and_beats, ticks_from_beats, groove_histogram
-from app.motif import sample_rhythm, detect_scale_from_audio, list_available_scales
+# Import from the shared hookgen_core package
+from hookgen_core import (
+    detect_scale_from_audio,
+    estimate_bpm_and_beats,
+    groove_histogram,
+    list_available_scales,
+    ticks_from_beats,
+)
 
 router = APIRouter()
 
@@ -268,7 +273,7 @@ async def analyze_audio(file: UploadFile = File(...)):
     except HTTPException:
         # Re-raise HTTP exceptions (validation errors, timeouts, etc.)
         raise
-    except Exception as e:
+    except Exception:
         # Catch any other unexpected errors
         logger.exception("Unhandled error processing audio request")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -502,7 +507,7 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                 "histogram": histogram
             })
             
-        except Exception as e:
+        except Exception:
             logger.exception("Unhandled error in streaming analyze")
             yield sse_event("error", {"detail": "Internal server error"})
         finally:
@@ -537,8 +542,8 @@ def generate_hooks(req: GenerateRequest):
     # Convert list to numpy array for the function
     hist_array = np.array(req.histogram)
     
-    # Import the new function
-    from app.motif import generate_structured_hook
+    # Import from shared library
+    from hookgen_core import generate_structured_hook
     
     for i in range(5):
         current_seed = base_seed + i
@@ -570,7 +575,8 @@ class MidiRequest(BaseModel):
     bpm: float = Field(gt=0, le=300)
 
 from fastapi.responses import Response
-from app.export import notes_to_midi_bytes
+from hookgen_core import notes_to_midi_bytes
+
 
 @router.post("/export/midi")
 def export_midi(req: MidiRequest):
@@ -591,7 +597,9 @@ def export_midi(req: MidiRequest):
     )
 
 import uuid
-from app.database import save_session, get_session
+
+from app.database import get_session, save_session
+
 
 class SessionData(GenerateRequest):
     pass

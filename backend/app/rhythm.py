@@ -9,26 +9,42 @@ def load_mono(file, sr=22050):
 
 def estimate_bpm_and_beats(y, sr):
     """
-    Simplified, faster BPM and beat detection.
-    Single pass through beat_track instead of multiple tempo estimations.
+    Ultra-fast BPM detection using onset autocorrelation.
+    Generates synthetic beat times from detected tempo.
     """
-    # Single pass - let beat_track handle everything
-    # This is much faster than computing onset_strength + tempo + beat_track separately
-    tempo_result, beat_frames = librosa.beat.beat_track(y=y, sr=sr, trim=True)
+    # Downsample for faster processing if sample rate is high
+    if sr > 22050:
+        factor = sr // 22050
+        y = y[::factor]
+        sr = sr // factor
     
-    # Handle both old and new librosa return formats
-    tempo = float(np.atleast_1d(tempo_result)[0]) if np.size(tempo_result) else 120.0
-    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+    # Get onset strength (relatively fast)
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
     
-    # Simple double-time correction if tempo seems too fast
-    if tempo > 160 and beat_times.size >= 4:
-        beat_times = beat_times[::2]
+    # Fast tempo estimation using autocorrelation (much faster than beat_track)
+    # This avoids the expensive dynamic programming in beat_track
+    try:
+        tempo = librosa.feature.rhythm.tempo(onset_envelope=onset_env, sr=sr, hop_length=512)
+        tempo = float(np.atleast_1d(tempo)[0])
+    except AttributeError:
+        # Older librosa versions
+        tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr, hop_length=512)
+        tempo = float(np.atleast_1d(tempo)[0])
+    
+    # Constrain tempo to reasonable range
+    if tempo > 160:
         tempo /= 2.0
-    elif tempo < 60 and beat_times.size >= 2:
-        # Interpolate beats if too slow
+    elif tempo < 60:
         tempo *= 2.0
     
-    return float(tempo) if tempo > 0 else 120.0, beat_times
+    tempo = max(60.0, min(180.0, tempo)) if tempo > 0 else 120.0
+    
+    # Generate synthetic beat times based on tempo (skip expensive beat tracking)
+    duration = len(y) / sr
+    beat_interval = 60.0 / tempo
+    beat_times = np.arange(0, duration, beat_interval)
+    
+    return float(tempo), beat_times
 
 def ticks_from_beats(beat_times, subdiv=4):
     # subdiv=4 → 16th notes

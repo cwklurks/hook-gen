@@ -20,11 +20,8 @@ RUN apt-get update && apt-get install -y \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend code
+# Copy backend code (includes examples/ directory)
 COPY backend/ .
-
-# Copy example audio files
-COPY hook-aid/examples ./examples
 
 # Copy built frontend static files
 COPY --from=frontend /frontend/out ./static

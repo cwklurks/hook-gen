@@ -27,7 +27,6 @@ venv/
 *.db
 outputs/
 hook-aid/
-!hook-aid/examples/
 
 # Docs
 *.md

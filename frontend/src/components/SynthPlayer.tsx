@@ -190,13 +190,17 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef }:
 
     const downloadMidi = async () => {
         try {
-            const res = await fetch("http://localhost:8000/export/midi", {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const res = await fetch(`${API_BASE}/export/midi`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ notes, bpm }),
             });
 
-            if (!res.ok) throw new Error("Export failed");
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`Export failed: ${res.status} ${res.statusText} - ${errorText}`);
+            }
 
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);

@@ -124,7 +124,7 @@ class Note(BaseModel):
     pitch: int = Field(ge=0, le=127)  # MIDI number
     start: float = Field(ge=0)  # In beats
     duration: float = Field(gt=0) # In beats
-    velocity: int = Field(ge=0, le=127)
+    velocity: int = Field(100, ge=0, le=127)
 
 class HookResponse(BaseModel):
     hooks: List[List[Note]]

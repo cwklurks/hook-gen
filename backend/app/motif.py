@@ -268,6 +268,12 @@ def detect_scale_from_audio(y, sr):
     if y.size == 0 or not np.any(np.abs(y)):
         return None, 0.0
 
+    # Downsample for faster processing if sample rate is high
+    if sr > 22050:
+        factor = sr // 22050
+        y = y[::factor]
+        sr = sr // factor
+
     # Skip HPSS (slow) - chroma_stft is fast and works well enough for key detection
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     if chroma.size == 0:

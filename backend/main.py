@@ -41,10 +41,33 @@ async def cors_handler(request: Request, call_next):
     return response
 
 from app.database import init_db
+from app.motif import detect_scale_from_audio
+from app.rhythm import estimate_bpm_and_beats, groove_histogram, ticks_from_beats
+import numpy as np
 
 @app.on_event("startup")
 def on_startup():
     init_db()
+    
+    # Warm up librosa/audio processing
+    try:
+        logger.info("Warming up audio analysis models...")
+        # Create 1 second of silence/noise
+        dummy_audio = np.random.uniform(-0.1, 0.1, 22050).astype(np.float32)
+        sr = 22050
+        
+        # Warm up key detection
+        detect_scale_from_audio(dummy_audio, sr)
+        
+        # Warm up BPM/rhythm detection
+        tempo, beats = estimate_bpm_and_beats(dummy_audio, sr)
+        ticks = ticks_from_beats(beats)
+        groove_histogram(dummy_audio, sr, ticks)
+        
+        logger.info("Audio analysis models warmed up")
+    except Exception as e:
+        logger.warning(f"Warm-up failed: {e}")
+        
     logger.info("Application started successfully")
 
 # Health check / root endpoint

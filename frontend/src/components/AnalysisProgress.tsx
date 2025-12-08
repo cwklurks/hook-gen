@@ -119,14 +119,27 @@ export default function AnalysisProgress({ progress, stage, message }: AnalysisP
       </div>
       
       {/* Status message */}
-      <motion.p
-        key={message}
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-sm text-neutral-300 text-center min-h-[20px]"
-      >
-        {message}
-      </motion.p>
+      <div className="flex flex-col items-center">
+        <motion.p
+          key={message}
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-sm text-neutral-300 text-center min-h-[20px]"
+        >
+          {message}
+        </motion.p>
+        
+        {stage === "scale" && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 2 }}
+            className="text-xs text-neutral-500 mt-1"
+          >
+            This may take 3-5 minutes
+          </motion.p>
+        )}
+      </div>
     </div>
   );
 }

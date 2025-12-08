@@ -113,7 +113,12 @@ def sse_event(event: str, data: dict) -> str:
 
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_audio(file: UploadFile = File(...)):
-    """Non-streaming analyze endpoint for backwards compatibility."""
+    """Non-streaming analyze endpoint."""
+    import sys
+    print(f"[ANALYZE-SIMPLE] Request received: {file.filename}, {file.content_type}", flush=True)
+    sys.stdout.flush()
+    logger.info(f"[ANALYZE-SIMPLE] Request received: {file.filename}, {file.content_type}")
+    
     buffer = None
     try:
         # Validate content type
@@ -159,22 +164,27 @@ async def analyze_audio(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="File is empty")
         
         buffer = io.BytesIO(contents)
+        print(f"[ANALYZE-SIMPLE] File loaded into buffer: {total_size} bytes", flush=True)
         
         # Wrap audio processing in a timeout to prevent hangs
         async def process_audio():
             # Run librosa.load in executor since it's CPU-bound
             # Only load first N seconds for faster processing
             loop = asyncio.get_event_loop()
+            print("[ANALYZE-SIMPLE] Starting audio decode...", flush=True)
             audio_array, sample_rate = await loop.run_in_executor(
                 None,
                 lambda: librosa.load(buffer, sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
             )
+            print(f"[ANALYZE-SIMPLE] Decoded: {len(audio_array)} samples @ {sample_rate}Hz", flush=True)
             
             # Process audio analysis
+            print("[ANALYZE-SIMPLE] Starting BPM detection...", flush=True)
             detected_bpm, beat_times = await loop.run_in_executor(
                 None,
                 lambda: estimate_bpm_and_beats(audio_array, sample_rate)
             )
+            print(f"[ANALYZE-SIMPLE] BPM: {detected_bpm}, beats: {len(beat_times)}", flush=True)
             
             ticks = ticks_from_beats(beat_times, subdiv=4)
             histogram = await loop.run_in_executor(
@@ -260,9 +270,16 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
     - result: {bpm, scale, scale_score, histogram}
     - error: {detail: string}
     """
+    # Immediate log BEFORE the generator starts
+    import sys
+    print(f"[ANALYZE] Request received: {file.filename}, {file.content_type}", flush=True)
+    sys.stdout.flush()
+    logger.info(f"[ANALYZE] Request received: {file.filename}, {file.content_type}")
+    
     async def generate_events():
         buffer = None
         try:
+            print("[ANALYZE] Generator started", flush=True)
             # Stage 1: Validating file (0-10%)
             yield sse_event("progress", {
                 "stage": "validating",

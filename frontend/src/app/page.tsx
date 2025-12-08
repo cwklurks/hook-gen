@@ -164,16 +164,16 @@ export default function Home() {
       setFile(uploadedFile);
       setAudioUrl(URL.createObjectURL(uploadedFile));
 
-      // Auto analyze with streaming progress
+      // Auto analyze (non-streaming for better compatibility with Render)
       setIsAnalyzing(true);
-      setAnalysisProgress({ stage: "validating", progress: 0, message: "Starting..." });
+      setAnalysisProgress({ stage: "analyzing", progress: 50, message: "Analyzing audio... this may take a moment" });
 
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
       try {
-        // Use streaming endpoint for progress updates
-        const response = await fetch(`${API_BASE}/analyze/stream`, {
+        // Use simple POST endpoint (more reliable than SSE on some hosting)
+        const response = await fetch(`${API_BASE}/analyze`, {
           method: "POST",
           body: formData,
         });
@@ -187,65 +187,9 @@ export default function Home() {
           return;
         }
 
-        // Read the SSE stream
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-
-        if (!reader) {
-          throw new Error("Failed to read response stream");
-        }
-
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // SSE messages are separated by double newlines
-          const messages = buffer.split("\n\n");
-          buffer = messages.pop() || ""; // Keep incomplete message in buffer
-
-          for (const message of messages) {
-            if (!message.trim()) continue;
-
-            let eventType = "message";
-            let eventData = "";
-
-            for (const line of message.split("\n")) {
-              if (line.startsWith("event: ")) {
-                eventType = line.slice(7);
-              } else if (line.startsWith("data: ")) {
-                eventData = line.slice(6);
-              }
-            }
-
-            if (!eventData) continue;
-
-            try {
-              const data = JSON.parse(eventData);
-
-              if (eventType === "progress") {
-                setAnalysisProgress({
-                  stage: data.stage,
-                  progress: data.progress,
-                  message: data.message
-                });
-              } else if (eventType === "result") {
-                setAnalysis(data);
-                setIsAnalyzing(false);
-              } else if (eventType === "error") {
-                setUploadError(data.detail);
-                setFile(null);
-                setAudioUrl(null);
-                setIsAnalyzing(false);
-              }
-            } catch (parseErr) {
-              console.error("Failed to parse SSE data:", parseErr);
-            }
-          }
-        }
+        const data = await response.json();
+        setAnalysis(data);
+        setIsAnalyzing(false);
       } catch (err) {
         console.error("Analysis failed", err);
         setUploadError("Failed to connect to the server. Please try again.");

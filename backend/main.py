@@ -1,8 +1,19 @@
 import logging
+import sys
 from fastapi import FastAPI, Request, Response
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging to flush immediately to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Force flush after each log
+for handler in logging.root.handlers:
+    handler.flush()
+    
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hook-Gen API", version="2.0.0")

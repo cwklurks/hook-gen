@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ .
 
+# Copy example audio files
+COPY hook-aid/examples ./examples
+
 # Copy built frontend static files
 COPY --from=frontend /frontend/out ./static
 

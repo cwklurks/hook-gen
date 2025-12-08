@@ -14,20 +14,31 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Path to example files - check Docker mount location first, then local dev paths
-EXAMPLES_DIR = Path("/app/examples")  # Docker mount location
-if not EXAMPLES_DIR.exists():
-    # Fallback for local development (running from project root)
-    EXAMPLES_DIR = Path(__file__).parent.parent.parent / "hook-aid" / "examples"
-if not EXAMPLES_DIR.exists():
-    # Fallback for running from backend directory
-    EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
+def get_examples_dir() -> Path:
+    """Get the examples directory, checking multiple possible locations."""
+    # Check locations in order of preference
+    candidates = [
+        Path("/app/examples"),  # Docker mount location
+        Path(__file__).parent.parent.parent / "hook-aid" / "examples",  # Project root
+        Path(__file__).parent.parent / "examples",  # Backend directory
+    ]
+    
+    for path in candidates:
+        if path.exists() and path.is_dir():
+            logger.info(f"Using examples directory: {path}")
+            return path
+    
+    logger.warning(f"No examples directory found. Checked: {[str(p) for p in candidates]}")
+    return candidates[0]  # Return first candidate even if not found
+
+EXAMPLES_DIR = get_examples_dir()
 
 # Configuration constants
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
 AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processing
-MAX_AUDIO_DURATION_SECONDS = 15  # Only analyze first 15 seconds (enough for BPM/scale)
+MAX_AUDIO_DURATION_SECONDS = 10  # Only analyze first 10 seconds (enough for BPM/scale)
 AUDIO_DECODE_TIMEOUT_SECONDS = 60  # Decoding is CPU-intensive, especially on shared hosting
+ANALYSIS_TIMEOUT_SECONDS = 60  # Tempo/groove/scale analysis timeout
 
 # Allowed content types and file extensions
 ALLOWED_CONTENT_TYPES = {
@@ -313,6 +324,7 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                 "message": "Decoding audio..."
             })
             
+            logger.info(f"Starting audio decode: {total_size} bytes, filename={file.filename}")
             loop = asyncio.get_event_loop()
             
             try:
@@ -323,14 +335,17 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                     ),
                     timeout=AUDIO_DECODE_TIMEOUT_SECONDS
                 )
+                logger.info(f"Audio decoded successfully: {len(audio_array)} samples at {sample_rate}Hz")
             except asyncio.TimeoutError:
+                logger.error(f"Audio decode timed out after {AUDIO_DECODE_TIMEOUT_SECONDS}s for file: {file.filename}")
                 yield sse_event("error", {"detail": f"Audio decoding timed out after {AUDIO_DECODE_TIMEOUT_SECONDS}s. Try a shorter or smaller file."})
                 return
             except Exception as e:
                 error_msg = str(e)
+                logger.error(f"Audio decode failed for {file.filename}: {error_msg}", exc_info=True)
                 if "NoBackendError" in error_msg or "could not be loaded" in error_msg.lower():
                     yield sse_event("error", {
-                        "detail": "Unsupported audio format or corrupted file"
+                        "detail": "Unsupported audio format or corrupted file. Make sure ffmpeg is installed for MP3/M4A support."
                     })
                 else:
                     yield sse_event("error", {"detail": f"Failed to decode audio: {error_msg}"})
@@ -343,16 +358,19 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                 "message": "Detecting tempo..."
             })
             
+            logger.info(f"Starting tempo detection for {len(audio_array)} samples")
             try:
                 detected_bpm, beat_times = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
                         lambda: estimate_bpm_and_beats(audio_array, sample_rate)
                     ),
-                    timeout=30
+                    timeout=ANALYSIS_TIMEOUT_SECONDS
                 )
+                logger.info(f"Tempo detected: {detected_bpm} BPM, {len(beat_times)} beats")
             except asyncio.TimeoutError:
-                yield sse_event("error", {"detail": "Tempo detection timed out"})
+                logger.error(f"Tempo detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
+                yield sse_event("error", {"detail": f"Tempo detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s"})
                 return
             
             yield sse_event("progress", {
@@ -370,16 +388,19 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
             
             ticks = ticks_from_beats(beat_times, subdiv=4)
             
+            logger.info("Starting groove analysis")
             try:
                 histogram = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
                         lambda: groove_histogram(audio_array, sample_rate, ticks)
                     ),
-                    timeout=30
+                    timeout=ANALYSIS_TIMEOUT_SECONDS
                 )
+                logger.info("Groove analysis complete")
             except asyncio.TimeoutError:
-                yield sse_event("error", {"detail": "Groove analysis timed out"})
+                logger.error(f"Groove analysis timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
+                yield sse_event("error", {"detail": f"Groove analysis timed out after {ANALYSIS_TIMEOUT_SECONDS}s"})
                 return
             
             if histogram is None or not np.asarray(histogram).size or not np.any(histogram):
@@ -400,16 +421,19 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                 "message": "Detecting musical key..."
             })
             
+            logger.info("Starting scale detection")
             try:
                 suggested_scale, suggested_score = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
                         lambda: detect_scale_from_audio(audio_array, sample_rate)
                     ),
-                    timeout=30
+                    timeout=ANALYSIS_TIMEOUT_SECONDS
                 )
+                logger.info(f"Scale detected: {suggested_scale} (score: {suggested_score})")
             except asyncio.TimeoutError:
-                yield sse_event("error", {"detail": "Scale detection timed out"})
+                logger.error(f"Scale detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
+                yield sse_event("error", {"detail": f"Scale detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s"})
                 return
             
             yield sse_event("progress", {
@@ -582,12 +606,15 @@ def parse_example_filename(filename: str) -> dict:
 @router.get("/examples")
 def list_examples() -> List[ExampleFile]:
     """List all available example drum loops."""
-    if not EXAMPLES_DIR.exists():
-        logger.warning(f"Examples directory not found: {EXAMPLES_DIR}")
+    # Re-check the directory at request time in case it was mounted after startup
+    examples_dir = get_examples_dir()
+    
+    if not examples_dir.exists():
+        logger.warning(f"Examples directory not found: {examples_dir}")
         return []
     
     examples = []
-    for f in sorted(EXAMPLES_DIR.glob("*.wav")):
+    for f in sorted(examples_dir.glob("*.wav")):
         meta = parse_example_filename(f.name)
         examples.append(ExampleFile(
             name=meta["name"],
@@ -595,6 +622,7 @@ def list_examples() -> List[ExampleFile]:
             description=meta["description"]
         ))
     
+    logger.info(f"Found {len(examples)} example files in {examples_dir}")
     return examples
 
 
@@ -605,7 +633,8 @@ async def get_example_file(filename: str):
     if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    filepath = EXAMPLES_DIR / filename
+    examples_dir = get_examples_dir()
+    filepath = examples_dir / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Example file not found")
     
@@ -623,7 +652,8 @@ async def analyze_example(filename: str):
     if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     
-    filepath = EXAMPLES_DIR / filename
+    examples_dir = get_examples_dir()
+    filepath = examples_dir / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(status_code=404, detail="Example file not found")
     

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Music, Sliders, Activity, Zap, ArrowRight } from "lucide-react";
+import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github } from "lucide-react";
 import Waveform from "@/components/Waveform";
 import PianoRoll from "@/components/PianoRoll";
 import SynthPlayer from "@/components/SynthPlayer";
 import SoundWaveBackground from "@/components/SoundWaveBackground";
+import AnalysisProgress from "@/components/AnalysisProgress";
 
 // API base URL: use env var for local dev, empty string for production (same origin)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -25,12 +26,35 @@ interface Note {
   velocity: number;
 }
 
+interface ExampleFile {
+  name: string;
+  filename: string;
+  description: string;
+}
+
+interface AnalysisProgress {
+  stage: string;
+  progress: number;
+  message: string;
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Progress tracking for analysis
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress>({
+    stage: "validating",
+    progress: 0,
+    message: "Starting..."
+  });
+
+  // Example files
+  const [examples, setExamples] = useState<ExampleFile[]>([]);
+  const [selectedExample, setSelectedExample] = useState<string | null>(null);
 
   // Generation Parameters
   const [density, setDensity] = useState(7);
@@ -44,12 +68,90 @@ export default function Home() {
 
   const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
 
+  // Fetch example files on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/examples`)
+      .then((res) => res.json())
+      .then((data) => setExamples(data))
+      .catch((err) => console.error("Failed to load examples:", err));
+  }, []);
+
+  const handleExampleSelect = async (example: ExampleFile) => {
+    setUploadError(null);
+    setSelectedExample(example.filename);
+    setIsAnalyzing(true);
+    setFile(null);
+    setGeneratedHooks([]);
+
+    // Initialize progress
+    setAnalysisProgress({ stage: "loading", progress: 10, message: "Fetching example audio..." });
+
+    try {
+      // Fetch the audio file for waveform display
+      const audioRes = await fetch(`${API_BASE}/examples/${example.filename}`);
+      if (!audioRes.ok) throw new Error("Failed to fetch example file");
+
+      setAnalysisProgress({ stage: "loading", progress: 25, message: "Decoding audio..." });
+      const audioBlob = await audioRes.blob();
+      setAudioUrl(URL.createObjectURL(audioBlob));
+
+      // Analyze the example file on the server (simulate stages during wait)
+      setAnalysisProgress({ stage: "tempo", progress: 40, message: "Analyzing tempo..." });
+
+      // Simulate intermediate progress during the request
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress(prev => {
+          if (prev.progress < 85) {
+            const stages = [
+              { stage: "tempo", progress: 50, message: "Detecting beats..." },
+              { stage: "groove", progress: 60, message: "Analyzing groove pattern..." },
+              { stage: "groove", progress: 70, message: "Building rhythm histogram..." },
+              { stage: "scale", progress: 80, message: "Detecting musical key..." },
+            ];
+            const nextStage = stages.find(s => s.progress > prev.progress);
+            return nextStage || prev;
+          }
+          return prev;
+        });
+      }, 800);
+
+      const analysisRes = await fetch(`${API_BASE}/examples/${example.filename}/analyze`, {
+        method: "POST",
+      });
+
+      clearInterval(progressInterval);
+
+      const data = await analysisRes.json();
+
+      if (!analysisRes.ok) {
+        setUploadError(data.detail || "Failed to analyze example file.");
+        setAudioUrl(null);
+        return;
+      }
+
+      setAnalysisProgress({ stage: "complete", progress: 100, message: "Analysis complete!" });
+
+      // Small delay to show completion before switching to results
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      setAnalysis(data);
+    } catch (err) {
+      console.error("Example analysis failed", err);
+      setUploadError("Failed to load example. Please try again.");
+      setAudioUrl(null);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const uploadedFile = e.target.files[0];
 
-      // Clear previous error
+      // Clear previous error and example selection
       setUploadError(null);
+      setSelectedExample(null);
+      setGeneratedHooks([]);
 
       // Validate file extension
       const fileName = uploadedFile.name.toLowerCase();
@@ -62,31 +164,91 @@ export default function Home() {
       setFile(uploadedFile);
       setAudioUrl(URL.createObjectURL(uploadedFile));
 
-      // Auto analyze
+      // Auto analyze with streaming progress
       setIsAnalyzing(true);
+      setAnalysisProgress({ stage: "validating", progress: 0, message: "Starting..." });
+
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
       try {
-        // Use API_BASE for local dev, empty for production (same origin)
-        const res = await fetch(`${API_BASE}/analyze`, {
+        // Use streaming endpoint for progress updates
+        const response = await fetch(`${API_BASE}/analyze/stream`, {
           method: "POST",
           body: formData,
         });
-        const data = await res.json();
 
-        if (!res.ok) {
-          setUploadError(data.detail || "Failed to analyze audio file.");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: "Failed to analyze audio file." }));
+          setUploadError(errorData.detail || "Failed to analyze audio file.");
           setFile(null);
           setAudioUrl(null);
+          setIsAnalyzing(false);
           return;
         }
 
-        setAnalysis(data);
+        // Read the SSE stream
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error("Failed to read response stream");
+        }
+
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE messages are separated by double newlines
+          const messages = buffer.split("\n\n");
+          buffer = messages.pop() || ""; // Keep incomplete message in buffer
+
+          for (const message of messages) {
+            if (!message.trim()) continue;
+
+            let eventType = "message";
+            let eventData = "";
+
+            for (const line of message.split("\n")) {
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7);
+              } else if (line.startsWith("data: ")) {
+                eventData = line.slice(6);
+              }
+            }
+
+            if (!eventData) continue;
+
+            try {
+              const data = JSON.parse(eventData);
+
+              if (eventType === "progress") {
+                setAnalysisProgress({
+                  stage: data.stage,
+                  progress: data.progress,
+                  message: data.message
+                });
+              } else if (eventType === "result") {
+                setAnalysis(data);
+                setIsAnalyzing(false);
+              } else if (eventType === "error") {
+                setUploadError(data.detail);
+                setFile(null);
+                setAudioUrl(null);
+                setIsAnalyzing(false);
+              }
+            } catch (parseErr) {
+              console.error("Failed to parse SSE data:", parseErr);
+            }
+          }
+        }
       } catch (err) {
         console.error("Analysis failed", err);
         setUploadError("Failed to connect to the server. Please try again.");
-      } finally {
         setIsAnalyzing(false);
       }
     }
@@ -125,6 +287,17 @@ export default function Home() {
     <main className="min-h-screen w-full relative overflow-hidden selection:bg-white/20 selection:text-white">
       <SoundWaveBackground />
 
+      {/* GitHub Link */}
+      <a
+        href="https://github.com/cwklurks/hook-gen"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed top-6 right-6 z-50 p-3 rounded-full border border-white/10 bg-white/[0.02] backdrop-blur-sm text-neutral-500 hover:text-white hover:border-white/30 hover:bg-white/[0.05] transition-all duration-300 group"
+        aria-label="View source on GitHub"
+      >
+        <Github size={18} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
+      </a>
+
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-24 flex flex-col gap-24">
 
         {/* Hero Section */}
@@ -158,34 +331,63 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 gap-8"
           >
             {/* Upload Area */}
-            <div className={`group relative h-64 rounded-sm border bg-white/[0.02] hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50" : "border-white/10 hover:border-white/20"}`}>
-              <input
-                type="file"
-                onChange={handleFileUpload}
-                accept=".wav,.mp3,.mp4,.m4a,audio/wav,audio/mpeg,audio/mp4"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
-                <div className={`p-4 rounded-full bg-white/5 group-hover:scale-110 transition-transform duration-500 ${uploadError ? "text-red-400" : "text-neutral-400"}`}>
-                  <Upload size={24} strokeWidth={1.5} />
+            <div className="space-y-4">
+              <div className={`group relative h-48 rounded-sm border bg-white/[0.02] hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50" : "border-white/10 hover:border-white/20"}`}>
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  accept=".wav,.mp3,.mp4,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
+                  <div className={`p-4 rounded-full bg-white/5 group-hover:scale-110 transition-transform duration-500 ${uploadError ? "text-red-400" : "text-neutral-400"}`}>
+                    <Upload size={24} strokeWidth={1.5} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-neutral-200 font-medium">Drop Audio File</p>
+                    <p className="text-neutral-500 text-sm mt-1">WAV, MP3, or MP4 • Max 100MB</p>
+                  </div>
+                  {uploadError && (
+                    <p className="text-red-400 text-sm mt-2 px-4 text-center">{uploadError}</p>
+                  )}
                 </div>
-                <div className="text-center">
-                  <p className="text-neutral-200 font-medium">Drop Audio File</p>
-                  <p className="text-neutral-500 text-sm mt-1">WAV, MP3, or MP4 • Max 100MB</p>
-                </div>
-                {uploadError && (
-                  <p className="text-red-400 text-sm mt-2 px-4 text-center">{uploadError}</p>
-                )}
               </div>
+
+              {/* Example Files */}
+              {examples.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-neutral-500 text-xs uppercase tracking-widest">
+                    <Disc3 size={12} />
+                    <span>Or try an example</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                    {examples.map((example) => (
+                      <button
+                        key={example.filename}
+                        onClick={() => handleExampleSelect(example)}
+                        disabled={isAnalyzing}
+                        className={`text-left px-3 py-2 text-xs rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${selectedExample === example.filename
+                          ? "bg-white/10 border-white/30 text-white"
+                          : "bg-white/[0.02] border-white/10 text-neutral-400 hover:bg-white/[0.05] hover:border-white/20 hover:text-neutral-200"
+                          }`}
+                      >
+                        <div className="font-medium truncate">{example.name}</div>
+                        <div className="text-neutral-600 truncate text-[10px] mt-0.5">{example.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Analysis Display */}
             <div className="h-64 rounded-sm border border-white/10 bg-white/[0.02] p-8 flex flex-col justify-center relative overflow-hidden">
               {isAnalyzing ? (
-                <div className="flex flex-col items-center justify-center h-full gap-4 text-neutral-400">
-                  <Activity className="animate-spin" strokeWidth={1.5} />
-                  <span className="text-sm tracking-widest uppercase">Processing Audio...</span>
-                </div>
+                <AnalysisProgress
+                  progress={analysisProgress.progress}
+                  stage={analysisProgress.stage}
+                  message={analysisProgress.message}
+                />
               ) : analysis ? (
                 <div className="space-y-8 relative z-10">
                   <div className="flex justify-between items-end border-b border-white/5 pb-4">

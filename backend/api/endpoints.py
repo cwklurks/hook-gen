@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any, Literal
 import io
@@ -8,8 +9,19 @@ from math import isclose
 import logging
 import asyncio
 import os
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Path to example files - check Docker mount location first, then local dev paths
+EXAMPLES_DIR = Path("/app/examples")  # Docker mount location
+if not EXAMPLES_DIR.exists():
+    # Fallback for local development (running from project root)
+    EXAMPLES_DIR = Path(__file__).parent.parent.parent / "hook-aid" / "examples"
+if not EXAMPLES_DIR.exists():
+    # Fallback for running from backend directory
+    EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
 # Configuration constants
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
@@ -82,8 +94,14 @@ class HookResponse(BaseModel):
 def get_scales():
     return {"scales": list_available_scales()}
 
+def sse_event(event: str, data: dict) -> str:
+    """Format a Server-Sent Event message."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_audio(file: UploadFile = File(...)):
+    """Non-streaming analyze endpoint for backwards compatibility."""
     buffer = None
     try:
         # Validate content type
@@ -219,6 +237,225 @@ async def analyze_audio(file: UploadFile = File(...)):
         except Exception:
             pass
 
+
+@router.post("/analyze/stream")
+async def analyze_audio_stream(file: UploadFile = File(...)):
+    """
+    Streaming analyze endpoint that sends progress updates via Server-Sent Events.
+    
+    Events:
+    - progress: {stage: string, progress: number (0-100), message: string}
+    - result: {bpm, scale, scale_score, histogram}
+    - error: {detail: string}
+    """
+    async def generate_events():
+        buffer = None
+        try:
+            # Stage 1: Validating file (0-10%)
+            yield sse_event("progress", {
+                "stage": "validating",
+                "progress": 0,
+                "message": "Validating file..."
+            })
+            
+            # Validate content type
+            if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+                yield sse_event("error", {
+                    "detail": f"Invalid content type. Allowed types: {', '.join(sorted(ALLOWED_CONTENT_TYPES))}"
+                })
+                return
+            
+            # Validate file extension
+            if file.filename:
+                file_ext = os.path.splitext(file.filename.lower())[1]
+                if file_ext not in ALLOWED_EXTENSIONS:
+                    yield sse_event("error", {
+                        "detail": f"Invalid file extension. Allowed extensions: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                    })
+                    return
+            
+            yield sse_event("progress", {
+                "stage": "uploading",
+                "progress": 5,
+                "message": "Reading file..."
+            })
+            
+            # Read file contents
+            contents = bytearray()
+            total_size = 0
+            chunk_size = 1024 * 1024
+            
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE_BYTES:
+                    yield sse_event("error", {
+                        "detail": f"File too large. Maximum size: {MAX_FILE_SIZE_BYTES / (1024 * 1024):.0f} MB"
+                    })
+                    return
+                
+                contents.extend(chunk)
+            
+            if total_size == 0:
+                yield sse_event("error", {"detail": "File is empty"})
+                return
+            
+            buffer = io.BytesIO(contents)
+            
+            # Stage 2: Loading audio (10-30%)
+            yield sse_event("progress", {
+                "stage": "loading",
+                "progress": 10,
+                "message": "Decoding audio..."
+            })
+            
+            loop = asyncio.get_event_loop()
+            
+            try:
+                audio_array, sample_rate = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: librosa.load(buffer, sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+                    ),
+                    timeout=30
+                )
+            except asyncio.TimeoutError:
+                yield sse_event("error", {"detail": "Audio decoding timed out"})
+                return
+            except Exception as e:
+                error_msg = str(e)
+                if "NoBackendError" in error_msg or "could not be loaded" in error_msg.lower():
+                    yield sse_event("error", {
+                        "detail": "Unsupported audio format or corrupted file"
+                    })
+                else:
+                    yield sse_event("error", {"detail": f"Failed to decode audio: {error_msg}"})
+                return
+            
+            # Stage 3: Detecting tempo (30-55%)
+            yield sse_event("progress", {
+                "stage": "tempo",
+                "progress": 30,
+                "message": "Detecting tempo..."
+            })
+            
+            try:
+                detected_bpm, beat_times = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: estimate_bpm_and_beats(audio_array, sample_rate)
+                    ),
+                    timeout=30
+                )
+            except asyncio.TimeoutError:
+                yield sse_event("error", {"detail": "Tempo detection timed out"})
+                return
+            
+            yield sse_event("progress", {
+                "stage": "tempo",
+                "progress": 55,
+                "message": f"Found tempo: {round(detected_bpm) if detected_bpm else 120} BPM"
+            })
+            
+            # Stage 4: Analyzing groove (55-75%)
+            yield sse_event("progress", {
+                "stage": "groove",
+                "progress": 55,
+                "message": "Analyzing groove pattern..."
+            })
+            
+            ticks = ticks_from_beats(beat_times, subdiv=4)
+            
+            try:
+                histogram = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: groove_histogram(audio_array, sample_rate, ticks)
+                    ),
+                    timeout=30
+                )
+            except asyncio.TimeoutError:
+                yield sse_event("error", {"detail": "Groove analysis timed out"})
+                return
+            
+            if histogram is None or not np.asarray(histogram).size or not np.any(histogram):
+                histogram = (np.ones(16) / 16.0).tolist()
+            else:
+                histogram = histogram.tolist()
+            
+            yield sse_event("progress", {
+                "stage": "groove",
+                "progress": 75,
+                "message": "Groove pattern captured"
+            })
+            
+            # Stage 5: Detecting key/scale (75-95%)
+            yield sse_event("progress", {
+                "stage": "scale",
+                "progress": 75,
+                "message": "Detecting musical key..."
+            })
+            
+            try:
+                suggested_scale, suggested_score = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: detect_scale_from_audio(audio_array, sample_rate)
+                    ),
+                    timeout=30
+                )
+            except asyncio.TimeoutError:
+                yield sse_event("error", {"detail": "Scale detection timed out"})
+                return
+            
+            yield sse_event("progress", {
+                "stage": "scale",
+                "progress": 95,
+                "message": f"Detected key: {suggested_scale}" if suggested_scale else "Key detection complete"
+            })
+            
+            # Stage 6: Complete (100%)
+            yield sse_event("progress", {
+                "stage": "complete",
+                "progress": 100,
+                "message": "Analysis complete!"
+            })
+            
+            # Send final result
+            yield sse_event("result", {
+                "bpm": detected_bpm if detected_bpm else 120.0,
+                "scale": suggested_scale,
+                "scale_score": suggested_score,
+                "histogram": histogram
+            })
+            
+        except Exception as e:
+            logger.exception("Unhandled error in streaming analyze")
+            yield sse_event("error", {"detail": "Internal server error"})
+        finally:
+            if buffer is not None:
+                try:
+                    buffer.close()
+                except Exception:
+                    pass
+            try:
+                await file.close()
+            except Exception:
+                pass
+    
+    return StreamingResponse(
+        generate_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
 @router.post("/generate", response_model=HookResponse)
 def generate_hooks(req: GenerateRequest):
     reg_map = {"low": (48, 69), "mid": (55, 76), "high": (62, 84)}
@@ -301,3 +538,131 @@ def get_session_endpoint(session_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Session not found")
     return data
+
+
+# ===== Example Files Endpoints =====
+
+class ExampleFile(BaseModel):
+    name: str
+    filename: str
+    description: str
+
+def parse_example_filename(filename: str) -> dict:
+    """Parse example filename like 'groove_100bpm.wav' into metadata."""
+    name = filename.replace(".wav", "").replace("_", " ").title()
+    
+    # Extract BPM if present
+    bpm_part = ""
+    for part in filename.replace(".wav", "").split("_"):
+        if "bpm" in part.lower():
+            bpm_part = part.replace("bpm", " BPM")
+            break
+    
+    # Create human-readable description
+    base_name = filename.replace(".wav", "")
+    descriptions = {
+        "groove_100bpm": "Funky groove pattern",
+        "groove_100bpm_long": "Extended groove pattern",
+        "straight_120bpm": "Straight 4/4 beat",
+        "fouronthefloor_124bpm": "Classic house kick pattern",
+        "shuffle_92bpm": "Shuffled swing feel",
+        "halftime_70bpm": "Half-time feel",
+        "reggaeton_96bpm": "Reggaeton dembow rhythm",
+        "brokenbeat_128bpm": "Syncopated broken beat",
+        "bass_cminor_90bpm": "C minor bass groove",
+        "keys_eminor_100bpm": "E minor keys loop",
+        "plucks_gmajor_110bpm": "G major pluck synth",
+    }
+    description = descriptions.get(base_name, f"Example loop at {bpm_part}" if bpm_part else "Example drum loop")
+    
+    return {"name": name, "description": description}
+
+
+@router.get("/examples")
+def list_examples() -> List[ExampleFile]:
+    """List all available example drum loops."""
+    if not EXAMPLES_DIR.exists():
+        logger.warning(f"Examples directory not found: {EXAMPLES_DIR}")
+        return []
+    
+    examples = []
+    for f in sorted(EXAMPLES_DIR.glob("*.wav")):
+        meta = parse_example_filename(f.name)
+        examples.append(ExampleFile(
+            name=meta["name"],
+            filename=f.name,
+            description=meta["description"]
+        ))
+    
+    return examples
+
+
+@router.get("/examples/{filename}")
+async def get_example_file(filename: str):
+    """Serve an example audio file."""
+    # Security: only allow .wav files and prevent path traversal
+    if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    filepath = EXAMPLES_DIR / filename
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Example file not found")
+    
+    return FileResponse(
+        path=filepath,
+        media_type="audio/wav",
+        filename=filename
+    )
+
+
+@router.post("/examples/{filename}/analyze", response_model=AnalysisResponse)
+async def analyze_example(filename: str):
+    """Analyze an example file directly (saves client from downloading first)."""
+    # Security: only allow .wav files and prevent path traversal
+    if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    filepath = EXAMPLES_DIR / filename
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Example file not found")
+    
+    try:
+        loop = asyncio.get_event_loop()
+        
+        # Load audio file
+        audio_array, sample_rate = await loop.run_in_executor(
+            None,
+            lambda: librosa.load(str(filepath), sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+        )
+        
+        # Process audio analysis
+        detected_bpm, beat_times = await loop.run_in_executor(
+            None,
+            lambda: estimate_bpm_and_beats(audio_array, sample_rate)
+        )
+        
+        ticks = ticks_from_beats(beat_times, subdiv=4)
+        histogram = await loop.run_in_executor(
+            None,
+            lambda: groove_histogram(audio_array, sample_rate, ticks)
+        )
+        
+        if histogram is None or not np.asarray(histogram).size or not np.any(histogram):
+            histogram = (np.ones(16) / 16.0).tolist()
+        else:
+            histogram = histogram.tolist()
+        
+        suggested_scale, suggested_score = await loop.run_in_executor(
+            None,
+            lambda: detect_scale_from_audio(audio_array, sample_rate)
+        )
+        
+        return AnalysisResponse(
+            bpm=detected_bpm if detected_bpm else 120.0,
+            scale=suggested_scale,
+            scale_score=suggested_score,
+            histogram=histogram
+        )
+    except Exception as e:
+        logger.error(f"Error analyzing example file: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to analyze example: {str(e)}")

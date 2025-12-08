@@ -9,7 +9,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Hook Gen 2.0 | AI Music Phrasing",
+  title: "HookGen | AI Melody Maker",
   description: "Generate musical hooks from your drum loops.",
 };
 

@@ -298,7 +298,7 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 gap-8"
           >
             {/* Upload Area */}
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className={`group relative h-48 rounded-sm border bg-white/[0.02] hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden ${uploadError ? "border-red-500/50" : "border-white/10 hover:border-white/20"}`}>
                 <input
                   type="file"
@@ -321,33 +321,47 @@ export default function Home() {
               </div>
 
               {/* Example Files */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-neutral-500 text-xs uppercase tracking-widest">
-                  <Disc3 size={12} />
-                  <span>Or try an example</span>
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-3 text-neutral-500 text-xs uppercase tracking-widest">
+                  <div className="h-px flex-1 bg-white/10"></div>
+                  <span className="flex items-center gap-2">
+                    <Disc3 size={12} />
+                    <span>Try an example</span>
+                  </span>
+                  <div className="h-px flex-1 bg-white/10"></div>
                 </div>
                 
                 {examples.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                  <div className="grid grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                     {examples.map((example) => (
                       <button
                         key={example.filename}
                         onClick={() => handleExampleSelect(example)}
                         disabled={isAnalyzing}
-                        className={`text-left px-3 py-2 text-xs rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                        className={`group relative p-3 text-left rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
                           selectedExample === example.filename
                             ? "bg-white/10 border-white/30 text-white"
-                            : "bg-white/[0.02] border-white/10 text-neutral-400 hover:bg-white/[0.05] hover:border-white/20 hover:text-neutral-200"
+                            : "bg-white/[0.02] border-white/5 text-neutral-400 hover:bg-white/[0.05] hover:border-white/10 hover:text-neutral-200"
                         }`}
                       >
-                        <div className="font-medium truncate">{example.name}</div>
-                        <div className="text-neutral-600 truncate text-[10px] mt-0.5">{example.description}</div>
+                        <div className="flex justify-between items-start mb-1">
+                           <div className="font-medium truncate text-xs">{example.name}</div>
+                           {selectedExample === example.filename && (
+                             <Activity size={10} className="text-emerald-400 animate-pulse" />
+                           )}
+                        </div>
+                        <div className="text-neutral-600 text-[10px] leading-tight line-clamp-2 group-hover:text-neutral-500 transition-colors">
+                          {example.description}
+                        </div>
+                        
+                        {/* Hover accent */}
+                        <div className="absolute bottom-0 left-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent w-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-neutral-600 text-xs italic py-2 pl-1">
-                    Loading examples...
+                  <div className="flex items-center justify-center p-4 border border-dashed border-white/10 rounded-sm text-neutral-600 text-xs italic">
+                    <div className="animate-pulse">Loading examples...</div>
                   </div>
                 )}
               </div>

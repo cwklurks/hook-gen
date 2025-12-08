@@ -224,14 +224,14 @@ async def analyze_audio(file: UploadFile = File(...)):
         logger.exception("Unhandled error processing audio request")
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
-        # Ensure resources are cleaned up
-        if buffer is not None:
-            try:
-                buffer.close()
-            except Exception:
-                pass
+        # Note: We intentionally do NOT close the BytesIO buffer here.
+        # When a timeout occurs, asyncio.wait_for cancels the coroutine but
+        # the underlying thread executor task continues running. Closing the
+        # buffer while soundfile is still reading from it in the thread causes
+        # "I/O operation on closed file" errors. BytesIO is purely in-memory
+        # and will be garbage collected safely when all references are gone.
         
-        # Ensure the file is closed
+        # Ensure the UploadFile is closed
         try:
             await file.close()
         except Exception:
@@ -436,11 +436,12 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
             logger.exception("Unhandled error in streaming analyze")
             yield sse_event("error", {"detail": "Internal server error"})
         finally:
-            if buffer is not None:
-                try:
-                    buffer.close()
-                except Exception:
-                    pass
+            # Note: We intentionally do NOT close the BytesIO buffer here.
+            # When a timeout occurs, asyncio.wait_for cancels the coroutine but
+            # the underlying thread executor task continues running. Closing the
+            # buffer while soundfile is still reading from it in the thread causes
+            # "I/O operation on closed file" errors. BytesIO is purely in-memory
+            # and will be garbage collected safely when all references are gone.
             try:
                 await file.close()
             except Exception:

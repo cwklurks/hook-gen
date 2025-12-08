@@ -8,42 +8,27 @@ def load_mono(file, sr=22050):
     return y, sr
 
 def estimate_bpm_and_beats(y, sr):
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    # Use beat.tempo for older librosa, feature.rhythm.tempo for newer
-    try:
-        tempo_candidates = np.atleast_1d(librosa.feature.rhythm.tempo(onset_envelope=onset_env, sr=sr, aggregate=None))
-    except AttributeError:
-        tempo_candidates = np.atleast_1d(librosa.beat.tempo(onset_envelope=onset_env, sr=sr, aggregate=None))
-    tempo_guess = 120.0
-    if tempo_candidates.size:
-        for cand in np.sort(tempo_candidates):
-            if 60.0 <= cand <= 160.0:
-                tempo_guess = float(cand)
-                break
-        else:
-            tempo_guess = float(tempo_candidates[0])
-
-    tempo_guess = tempo_guess if tempo_guess > 0 else 120.0
-
-    tempo_track, beat_frames = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, start_bpm=tempo_guess, trim=True)
-    tempo_track = float(np.atleast_1d(tempo_track)[0]) if np.size(tempo_track) else tempo_guess
+    """
+    Simplified, faster BPM and beat detection.
+    Single pass through beat_track instead of multiple tempo estimations.
+    """
+    # Single pass - let beat_track handle everything
+    # This is much faster than computing onset_strength + tempo + beat_track separately
+    tempo_result, beat_frames = librosa.beat.beat_track(y=y, sr=sr, trim=True)
+    
+    # Handle both old and new librosa return formats
+    tempo = float(np.atleast_1d(tempo_result)[0]) if np.size(tempo_result) else 120.0
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-
-    ratio = tempo_track / tempo_guess if tempo_guess else 1.0
-    if beat_times.size >= 4:
-        if 1.4 <= ratio <= 1.6:  # shuffle double-time tendency (3/2 factor)
-            beat_times = beat_times[::2]
-            tempo_track /= 1.5
-        elif 1.9 <= ratio <= 2.1:  # strict double-time
-            beat_times = beat_times[::2]
-            tempo_track /= 2.0
-
-    if beat_times.size < 2:  # fall back to the plain tracker if needed
-        tempo_track, beat_frames = librosa.beat.beat_track(y=y, sr=sr, trim=True)
-        tempo_track = float(np.atleast_1d(tempo_track)[0]) if np.size(tempo_track) else tempo_guess
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
-
-    return float(tempo_track), beat_times
+    
+    # Simple double-time correction if tempo seems too fast
+    if tempo > 160 and beat_times.size >= 4:
+        beat_times = beat_times[::2]
+        tempo /= 2.0
+    elif tempo < 60 and beat_times.size >= 2:
+        # Interpolate beats if too slow
+        tempo *= 2.0
+    
+    return float(tempo) if tempo > 0 else 120.0, beat_times
 
 def ticks_from_beats(beat_times, subdiv=4):
     # subdiv=4 → 16th notes

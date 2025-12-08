@@ -36,9 +36,9 @@ EXAMPLES_DIR = get_examples_dir()
 # Configuration constants
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
 AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processing
-MAX_AUDIO_DURATION_SECONDS = 10  # Only analyze first 10 seconds (enough for BPM/scale)
-AUDIO_DECODE_TIMEOUT_SECONDS = 60  # Decoding is CPU-intensive, especially on shared hosting
-ANALYSIS_TIMEOUT_SECONDS = 60  # Tempo/groove/scale analysis timeout
+MAX_AUDIO_DURATION_SECONDS = 8  # Only analyze first 8 seconds (enough for BPM/scale)
+AUDIO_DECODE_TIMEOUT_SECONDS = 45  # Decode timeout
+ANALYSIS_TIMEOUT_SECONDS = 45  # Tempo/groove/scale analysis timeout
 
 # Allowed content types and file extensions
 ALLOWED_CONTENT_TYPES = {
@@ -167,7 +167,7 @@ async def analyze_audio(file: UploadFile = File(...)):
             loop = asyncio.get_event_loop()
             audio_array, sample_rate = await loop.run_in_executor(
                 None,
-                lambda: librosa.load(buffer, sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+                lambda: librosa.load(buffer, sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
             )
             
             # Process audio analysis
@@ -328,10 +328,12 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
             loop = asyncio.get_event_loop()
             
             try:
+                # Use sr=None to skip resampling (MUCH faster on slow CPUs)
+                # librosa analysis functions handle different sample rates fine
                 audio_array, sample_rate = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
-                        lambda: librosa.load(buffer, sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+                        lambda: librosa.load(buffer, sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
                     ),
                     timeout=AUDIO_DECODE_TIMEOUT_SECONDS
                 )
@@ -663,7 +665,7 @@ async def analyze_example(filename: str):
         # Load audio file
         audio_array, sample_rate = await loop.run_in_executor(
             None,
-            lambda: librosa.load(str(filepath), sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+            lambda: librosa.load(str(filepath), sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
         )
         
         # Process audio analysis

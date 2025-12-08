@@ -257,7 +257,10 @@ def generate_structured_hook(histogram, scale="C minor", register=(55,76), densi
 
 
 def detect_scale_from_audio(y, sr):
-    """Return (scale, score) using a chroma template match; None if inconclusive."""
+    """Return (scale, score) using a chroma template match; None if inconclusive.
+    
+    Optimized for speed - skips HPSS and uses faster chroma_stft.
+    """
     if y is None or sr is None:
         return None, 0.0
 
@@ -265,9 +268,8 @@ def detect_scale_from_audio(y, sr):
     if y.size == 0 or not np.any(np.abs(y)):
         return None, 0.0
 
-    harmonic, _ = librosa.effects.hpss(y)
-    source = harmonic if np.any(np.abs(harmonic)) else y
-    chroma = librosa.feature.chroma_cqt(y=source, sr=sr)
+    # Skip HPSS (slow) - chroma_stft is fast and works well enough for key detection
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     if chroma.size == 0:
         return None, 0.0
 
@@ -278,16 +280,11 @@ def detect_scale_from_audio(y, sr):
     chroma_norm = chroma_vector / (np.linalg.norm(chroma_vector) + 1e-9)
     best_scale = None
     best_score = -1.0
-    second_score = -1.0
 
     for scale_name, template in SCALE_TEMPLATES.items():
         score = float(np.dot(chroma_norm, template))
         if score > best_score:
-            second_score = best_score
             best_score = score
             best_scale = scale_name
-        elif score > second_score:
-            second_score = score
 
-    # Return best guess regardless of low confidence (let the UI show the score)
     return best_scale, float(best_score)

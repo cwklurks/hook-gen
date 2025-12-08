@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any, Literal
 import io
 import librosa
+import soundfile as sf
 import numpy as np
 from math import isclose
 import logging
@@ -39,6 +40,32 @@ AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processi
 MAX_AUDIO_DURATION_SECONDS = 8  # Only analyze first 8 seconds (enough for BPM/scale)
 AUDIO_DECODE_TIMEOUT_SECONDS = 45  # Decode timeout
 ANALYSIS_TIMEOUT_SECONDS = 45  # Tempo/groove/scale analysis timeout
+
+
+def fast_load_audio(buffer, max_duration=8):
+    """
+    Fast audio loading using soundfile directly (much faster than librosa.load).
+    Returns mono audio and sample rate.
+    """
+    buffer.seek(0)
+    try:
+        # soundfile is much faster than librosa for reading
+        audio, sr = sf.read(buffer, dtype='float32')
+        
+        # Convert to mono if stereo
+        if len(audio.shape) > 1:
+            audio = audio.mean(axis=1)
+        
+        # Trim to max duration
+        max_samples = int(max_duration * sr)
+        if len(audio) > max_samples:
+            audio = audio[:max_samples]
+        
+        return audio, sr
+    except Exception as e:
+        # Fallback to librosa for non-WAV formats
+        buffer.seek(0)
+        return librosa.load(buffer, sr=None, mono=True, duration=max_duration)
 
 # Allowed content types and file extensions
 ALLOWED_CONTENT_TYPES = {
@@ -168,13 +195,13 @@ async def analyze_audio(file: UploadFile = File(...)):
         
         # Wrap audio processing in a timeout to prevent hangs
         async def process_audio():
-            # Run librosa.load in executor since it's CPU-bound
-            # Only load first N seconds for faster processing
             loop = asyncio.get_event_loop()
-            print("[ANALYZE-SIMPLE] Starting audio decode...", flush=True)
+            print("[ANALYZE-SIMPLE] Starting audio decode (fast path)...", flush=True)
+            
+            # Use fast_load_audio which uses soundfile directly for WAV files
             audio_array, sample_rate = await loop.run_in_executor(
                 None,
-                lambda: librosa.load(buffer, sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+                lambda: fast_load_audio(buffer, MAX_AUDIO_DURATION_SECONDS)
             )
             print(f"[ANALYZE-SIMPLE] Decoded: {len(audio_array)} samples @ {sample_rate}Hz", flush=True)
             
@@ -345,12 +372,11 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
             loop = asyncio.get_event_loop()
             
             try:
-                # Use sr=None to skip resampling (MUCH faster on slow CPUs)
-                # librosa analysis functions handle different sample rates fine
+                # Use fast_load_audio which uses soundfile directly (much faster)
                 audio_array, sample_rate = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
-                        lambda: librosa.load(buffer, sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+                        lambda: fast_load_audio(buffer, MAX_AUDIO_DURATION_SECONDS)
                     ),
                     timeout=AUDIO_DECODE_TIMEOUT_SECONDS
                 )

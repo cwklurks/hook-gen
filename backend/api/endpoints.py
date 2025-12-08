@@ -26,7 +26,8 @@ if not EXAMPLES_DIR.exists():
 # Configuration constants
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
 AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processing
-MAX_AUDIO_DURATION_SECONDS = 30  # Only analyze first 30 seconds (enough for BPM/scale)
+MAX_AUDIO_DURATION_SECONDS = 15  # Only analyze first 15 seconds (enough for BPM/scale)
+AUDIO_DECODE_TIMEOUT_SECONDS = 60  # Decoding is CPU-intensive, especially on shared hosting
 
 # Allowed content types and file extensions
 ALLOWED_CONTENT_TYPES = {
@@ -224,14 +225,14 @@ async def analyze_audio(file: UploadFile = File(...)):
         logger.exception("Unhandled error processing audio request")
         raise HTTPException(status_code=500, detail="Internal server error")
     finally:
-        # Note: We intentionally do NOT close the BytesIO buffer here.
-        # When a timeout occurs, asyncio.wait_for cancels the coroutine but
-        # the underlying thread executor task continues running. Closing the
-        # buffer while soundfile is still reading from it in the thread causes
-        # "I/O operation on closed file" errors. BytesIO is purely in-memory
-        # and will be garbage collected safely when all references are gone.
+        # Ensure resources are cleaned up
+        if buffer is not None:
+            try:
+                buffer.close()
+            except Exception:
+                pass
         
-        # Ensure the UploadFile is closed
+        # Ensure the file is closed
         try:
             await file.close()
         except Exception:
@@ -320,10 +321,10 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                         None,
                         lambda: librosa.load(buffer, sr=22050, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
                     ),
-                    timeout=30
+                    timeout=AUDIO_DECODE_TIMEOUT_SECONDS
                 )
             except asyncio.TimeoutError:
-                yield sse_event("error", {"detail": "Audio decoding timed out"})
+                yield sse_event("error", {"detail": f"Audio decoding timed out after {AUDIO_DECODE_TIMEOUT_SECONDS}s. Try a shorter or smaller file."})
                 return
             except Exception as e:
                 error_msg = str(e)
@@ -436,12 +437,11 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
             logger.exception("Unhandled error in streaming analyze")
             yield sse_event("error", {"detail": "Internal server error"})
         finally:
-            # Note: We intentionally do NOT close the BytesIO buffer here.
-            # When a timeout occurs, asyncio.wait_for cancels the coroutine but
-            # the underlying thread executor task continues running. Closing the
-            # buffer while soundfile is still reading from it in the thread causes
-            # "I/O operation on closed file" errors. BytesIO is purely in-memory
-            # and will be garbage collected safely when all references are gone.
+            if buffer is not None:
+                try:
+                    buffer.close()
+                except Exception:
+                    pass
             try:
                 await file.close()
             except Exception:

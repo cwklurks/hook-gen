@@ -49,19 +49,19 @@ def fast_load_audio(buffer, max_duration=8):
     """
     buffer.seek(0)
     try:
-        # soundfile is much faster than librosa for reading
-        audio, sr = sf.read(buffer, dtype='float32')
-        
-        # Convert to mono if stereo
-        if len(audio.shape) > 1:
-            audio = audio.mean(axis=1)
-        
-        # Trim to max duration
-        max_samples = int(max_duration * sr)
-        if len(audio) > max_samples:
-            audio = audio[:max_samples]
-        
-        return audio, sr
+        # Open as SoundFile to get metadata without reading whole file
+        with sf.SoundFile(buffer) as f:
+            sr = f.samplerate
+            # Calculate frames to read
+            max_frames = int(max_duration * sr)
+            # Read only the needed frames
+            audio = f.read(frames=max_frames, dtype='float32')
+            
+            # Convert to mono if stereo
+            if len(audio.shape) > 1:
+                audio = audio.mean(axis=1)
+                
+            return audio, sr
     except Exception as e:
         # Fallback to librosa for non-WAV formats
         buffer.seek(0)
@@ -705,10 +705,20 @@ async def analyze_example(filename: str):
     try:
         loop = asyncio.get_event_loop()
         
-        # Load audio file
+        # Load audio file efficiently
+        def load_example_fast():
+            # Use soundfile for fast partial reading
+            with sf.SoundFile(str(filepath)) as f:
+                sr = f.samplerate
+                max_frames = int(MAX_AUDIO_DURATION_SECONDS * sr)
+                audio = f.read(frames=max_frames, dtype='float32')
+                if len(audio.shape) > 1:
+                    audio = audio.mean(axis=1)
+                return audio, sr
+
         audio_array, sample_rate = await loop.run_in_executor(
             None,
-            lambda: librosa.load(str(filepath), sr=None, mono=True, duration=MAX_AUDIO_DURATION_SECONDS)
+            load_example_fast
         )
         
         # Process audio analysis

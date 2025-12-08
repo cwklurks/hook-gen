@@ -70,9 +70,16 @@ export default function Home() {
 
   // Fetch example files on mount
   useEffect(() => {
+    console.log("Fetching examples from:", `${API_BASE}/examples`);
     fetch(`${API_BASE}/examples`)
-      .then((res) => res.json())
-      .then((data) => setExamples(data))
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Loaded examples:", data);
+        setExamples(data);
+      })
       .catch((err) => console.error("Failed to load examples:", err));
   }, []);
 
@@ -314,30 +321,36 @@ export default function Home() {
               </div>
 
               {/* Example Files */}
-              {examples.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-neutral-500 text-xs uppercase tracking-widest">
-                    <Disc3 size={12} />
-                    <span>Or try an example</span>
-                  </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-neutral-500 text-xs uppercase tracking-widest">
+                  <Disc3 size={12} />
+                  <span>Or try an example</span>
+                </div>
+                
+                {examples.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
                     {examples.map((example) => (
                       <button
                         key={example.filename}
                         onClick={() => handleExampleSelect(example)}
                         disabled={isAnalyzing}
-                        className={`text-left px-3 py-2 text-xs rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${selectedExample === example.filename
-                          ? "bg-white/10 border-white/30 text-white"
-                          : "bg-white/[0.02] border-white/10 text-neutral-400 hover:bg-white/[0.05] hover:border-white/20 hover:text-neutral-200"
-                          }`}
+                        className={`text-left px-3 py-2 text-xs rounded-sm border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          selectedExample === example.filename
+                            ? "bg-white/10 border-white/30 text-white"
+                            : "bg-white/[0.02] border-white/10 text-neutral-400 hover:bg-white/[0.05] hover:border-white/20 hover:text-neutral-200"
+                        }`}
                       >
                         <div className="font-medium truncate">{example.name}</div>
                         <div className="text-neutral-600 truncate text-[10px] mt-0.5">{example.description}</div>
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-neutral-600 text-xs italic py-2 pl-1">
+                    Loading examples...
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Analysis Display */}

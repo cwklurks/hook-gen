@@ -1,3 +1,25 @@
+Metadata-Version: 2.4
+Name: hookgen-core
+Version: 1.0.0
+Summary: Shared library for musical hook generation and audio analysis
+Author: Hook-Gen Team
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: librosa>=0.9.0
+Requires-Dist: soundfile>=0.11.0
+Requires-Dist: mido>=1.2.10
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=3.0; extra == "dev"
+
 # HookGen Core
 
 Shared library for musical hook generation and audio analysis.
@@ -44,5 +66,4 @@ hook = generate_structured_hook(histogram, scale=scale, density=7)
 - `export`: MIDI and audio file export
 - `ui_helpers`: UI utility functions
 - `pkg_resources`: Minimal pkg_resources shim
-
 

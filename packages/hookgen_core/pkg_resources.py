@@ -50,3 +50,4 @@ def resource_filename(package_or_requirement: PackageLike, resource_name: str) -
         package_path = Path(getattr(package, "__file__", "")).parent
         return str(package_path / resource_name)
 
+

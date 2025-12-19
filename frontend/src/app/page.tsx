@@ -2,10 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github } from "lucide-react";
-import Waveform from "@/components/Waveform";
+import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github, Play, Square } from "lucide-react";
+import Waveform, { WaveformControls } from "@/components/Waveform";
 import PianoRoll from "@/components/PianoRoll";
-import SynthPlayer from "@/components/SynthPlayer";
+import SynthPlayer, { SynthPlayerControls } from "@/components/SynthPlayer";
 import SoundWaveBackground from "@/components/SoundWaveBackground";
 import AnalysisProgress from "@/components/AnalysisProgress";
 
@@ -65,7 +65,49 @@ export default function Home() {
   const [currentBeat, setCurrentBeat] = useState<number | undefined>(undefined);
   const seekRef = useRef<((beat: number) => void) | null>(null);
 
+  // Refs for synchronized playback
+  const waveformControlsRef = useRef<WaveformControls | null>(null);
+  const synthControlsRef = useRef<SynthPlayerControls | null>(null);
+  const [isPlayingTogether, setIsPlayingTogether] = useState(false);
+  const [waveformReady, setWaveformReady] = useState(false);
+
   const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
+
+  // Toggle synchronized playback of both audio and MIDI
+  const togglePlayTogether = async () => {
+    if (isPlayingTogether) {
+      // Stop both
+      waveformControlsRef.current?.stop();
+      synthControlsRef.current?.stop();
+      setIsPlayingTogether(false);
+    } else {
+      // Start both - reset positions first
+      waveformControlsRef.current?.seekTo(0);
+      if (seekRef.current) {
+        seekRef.current(0);
+      }
+
+      // Start both playbacks
+      await synthControlsRef.current?.play();
+      waveformControlsRef.current?.play();
+      setIsPlayingTogether(true);
+    }
+  };
+
+  // Handle when either audio stops (e.g., sample finishes)
+  const handleWaveformPlayStateChange = (playing: boolean) => {
+    if (!playing && isPlayingTogether) {
+      // If waveform stops while playing together, restart it (loop behavior)
+      waveformControlsRef.current?.seekTo(0);
+      waveformControlsRef.current?.play();
+    }
+  };
+
+  const handleSynthPlayStateChange = (playing: boolean) => {
+    if (!playing && isPlayingTogether) {
+      setIsPlayingTogether(false);
+    }
+  };
 
   // Fetch example files on mount
   useEffect(() => {
@@ -90,6 +132,8 @@ export default function Home() {
 
     // Initialize progress
     setAnalysisProgress({ stage: "loading", progress: 10, message: "Fetching example audio..." });
+    setWaveformReady(false);
+    setIsPlayingTogether(false);
 
     try {
       // Fetch the audio file for waveform display
@@ -157,6 +201,8 @@ export default function Home() {
       setUploadError(null);
       setSelectedExample(null);
       setGeneratedHooks([]);
+      setWaveformReady(false);
+      setIsPlayingTogether(false);
 
       // Validate file extension
       const fileName = uploadedFile.name.toLowerCase();
@@ -426,7 +472,12 @@ export default function Home() {
                 className="overflow-hidden"
               >
                 <div className="rounded-sm border border-white/10 bg-white/[0.02] p-8">
-                  <Waveform audioUrl={audioUrl} />
+                  <Waveform
+                    audioUrl={audioUrl}
+                    controlsRef={waveformControlsRef}
+                    onReady={() => setWaveformReady(true)}
+                    onPlayStateChange={handleWaveformPlayStateChange}
+                  />
                 </div>
               </motion.div>
             )}
@@ -549,6 +600,12 @@ export default function Home() {
                         onClick={() => {
                           setSelectedHookIndex(i);
                           setCurrentBeat(undefined); // Clear playhead when switching hooks
+                          // Stop synchronized playback when switching hooks
+                          if (isPlayingTogether) {
+                            waveformControlsRef.current?.stop();
+                            synthControlsRef.current?.stop();
+                            setIsPlayingTogether(false);
+                          }
                         }}
                         className={`w-full border-l-2 px-5 py-4 text-left text-sm transition-all ${
                           selectedHookIndex === i
@@ -589,8 +646,31 @@ export default function Home() {
                             bpm={analysis?.bpm || 120}
                             onPlayheadUpdate={setCurrentBeat}
                             onSeekRef={seekRef}
+                            controlsRef={synthControlsRef}
+                            onPlayStateChange={handleSynthPlayStateChange}
                           />
                         </div>
+
+                        {/* Play Together Button */}
+                        {audioUrl && waveformReady && (
+                          <div className="flex justify-center pt-4">
+                            <button
+                              onClick={togglePlayTogether}
+                              className={`flex items-center gap-3 rounded-sm border px-8 py-4 text-sm font-medium tracking-wide transition-all ${
+                                isPlayingTogether
+                                  ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                              }`}
+                            >
+                              {isPlayingTogether ? (
+                                <Square size={18} fill="currentColor" />
+                              ) : (
+                                <Play size={18} fill="currentColor" />
+                              )}
+                              {isPlayingTogether ? "STOP TOGETHER" : "PLAY TOGETHER"}
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

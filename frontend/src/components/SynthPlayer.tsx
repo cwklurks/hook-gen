@@ -11,19 +11,28 @@ interface Note {
   velocity: number;
 }
 
+export interface SynthPlayerControls {
+  play: () => Promise<void>;
+  stop: () => void;
+  isPlaying: () => boolean;
+}
+
 interface SynthPlayerProps {
   notes: Note[];
   bpm: number;
   onPlayheadUpdate?: (beat: number | undefined) => void;
   onSeekRef?: React.MutableRefObject<((beat: number) => void) | null>; // Ref to expose seek function
+  onPlayStateChange?: (isPlaying: boolean) => void;
+  controlsRef?: React.MutableRefObject<SynthPlayerControls | null>;
 }
 
-export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef }: SynthPlayerProps) {
+export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, onPlayStateChange, controlsRef }: SynthPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [preset, setPreset] = useState("pluck");
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const partRef = useRef<Tone.Part | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const onPlayStateChangeRef = useRef(onPlayStateChange);
 
   // Expose seek function via ref
   const seekToBeat = (beat: number) => {
@@ -55,6 +64,39 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef }:
       }
     };
   }, [onSeekRef, onPlayheadUpdate]);
+
+  // Keep onPlayStateChange ref updated
+  useEffect(() => {
+    onPlayStateChangeRef.current = onPlayStateChange;
+  }, [onPlayStateChange]);
+
+  // Expose controls via ref
+  useEffect(() => {
+    if (controlsRef) {
+      controlsRef.current = {
+        play: async () => {
+          await Tone.start();
+          if (Tone.Transport.state !== "started") {
+            Tone.Transport.start();
+            setIsPlaying(true);
+            if (onPlayStateChangeRef.current) onPlayStateChangeRef.current(true);
+          }
+        },
+        stop: () => {
+          Tone.Transport.stop();
+          setIsPlaying(false);
+          if (onPlayheadUpdate) onPlayheadUpdate(undefined);
+          if (onPlayStateChangeRef.current) onPlayStateChangeRef.current(false);
+        },
+        isPlaying: () => Tone.Transport.state === "started",
+      };
+    }
+    return () => {
+      if (controlsRef) {
+        controlsRef.current = null;
+      }
+    };
+  }, [controlsRef, onPlayheadUpdate]);
 
   useEffect(() => {
     // Initialize synth
@@ -179,9 +221,15 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef }:
       if (onPlayheadUpdate) {
         onPlayheadUpdate(undefined); // Hide playhead when stopped
       }
+      if (onPlayStateChangeRef.current) {
+        onPlayStateChangeRef.current(false);
+      }
     } else {
       Tone.Transport.start();
       setIsPlaying(true);
+      if (onPlayStateChangeRef.current) {
+        onPlayStateChangeRef.current(true);
+      }
     }
   };
 

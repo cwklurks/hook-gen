@@ -4,15 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import { Play, Pause } from "lucide-react";
 
+export interface WaveformControls {
+  play: () => void;
+  pause: () => void;
+  stop: () => void;
+  isPlaying: () => boolean;
+  getDuration: () => number;
+  getCurrentTime: () => number;
+  seekTo: (time: number) => void;
+}
+
 interface WaveformProps {
   audioUrl: string | null;
   onReady?: () => void;
+  onPlayStateChange?: (isPlaying: boolean) => void;
+  controlsRef?: React.MutableRefObject<WaveformControls | null>;
 }
 
-export default function Waveform({ audioUrl, onReady }: WaveformProps) {
+export default function Waveform({ audioUrl, onReady, onPlayStateChange, controlsRef }: WaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const onReadyRef = useRef(onReady);
+  const onPlayStateChangeRef = useRef(onPlayStateChange);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [prevAudioUrl, setPrevAudioUrl] = useState(audioUrl);
@@ -24,10 +37,50 @@ export default function Waveform({ audioUrl, onReady }: WaveformProps) {
     setIsPlaying(false);
   }
 
-  // Keep ref updated with latest onReady callback
+  // Keep refs updated with latest callbacks
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
+
+  useEffect(() => {
+    onPlayStateChangeRef.current = onPlayStateChange;
+  }, [onPlayStateChange]);
+
+  // Expose controls via ref
+  useEffect(() => {
+    if (controlsRef) {
+      controlsRef.current = {
+        play: () => {
+          if (wavesurfer.current && isReady) {
+            wavesurfer.current.play();
+          }
+        },
+        pause: () => {
+          if (wavesurfer.current) {
+            wavesurfer.current.pause();
+          }
+        },
+        stop: () => {
+          if (wavesurfer.current) {
+            wavesurfer.current.stop();
+          }
+        },
+        isPlaying: () => isPlaying,
+        getDuration: () => wavesurfer.current?.getDuration() || 0,
+        getCurrentTime: () => wavesurfer.current?.getCurrentTime() || 0,
+        seekTo: (time: number) => {
+          if (wavesurfer.current) {
+            wavesurfer.current.seekTo(time / wavesurfer.current.getDuration());
+          }
+        },
+      };
+    }
+    return () => {
+      if (controlsRef) {
+        controlsRef.current = null;
+      }
+    };
+  }, [controlsRef, isReady, isPlaying]);
 
   useEffect(() => {
     if (!containerRef.current || !audioUrl) return;
@@ -70,14 +123,21 @@ export default function Waveform({ audioUrl, onReady }: WaveformProps) {
     ws.on("finish", () => {
       if (!abortController.signal.aborted) {
         setIsPlaying(false);
+        if (onPlayStateChangeRef.current) onPlayStateChangeRef.current(false);
       }
     });
 
     ws.on("play", () => {
-      if (!abortController.signal.aborted) setIsPlaying(true);
+      if (!abortController.signal.aborted) {
+        setIsPlaying(true);
+        if (onPlayStateChangeRef.current) onPlayStateChangeRef.current(true);
+      }
     });
     ws.on("pause", () => {
-      if (!abortController.signal.aborted) setIsPlaying(false);
+      if (!abortController.signal.aborted) {
+        setIsPlaying(false);
+        if (onPlayStateChangeRef.current) onPlayStateChangeRef.current(false);
+      }
     });
 
     return () => {

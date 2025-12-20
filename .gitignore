@@ -14,7 +14,7 @@ node_modules/
 # Generated files
 *.mid
 *.zip
-
+*.md
 # Environment
 .env
 .env.*

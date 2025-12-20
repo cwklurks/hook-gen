@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github, Play, Square } from "lucide-react";
+import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github } from "lucide-react";
 import Waveform, { WaveformControls } from "@/components/Waveform";
 import PianoRoll from "@/components/PianoRoll";
 import SynthPlayer, { SynthPlayerControls } from "@/components/SynthPlayer";
@@ -12,11 +12,23 @@ import AnalysisProgress from "@/components/AnalysisProgress";
 // API base URL: use env var for local dev, empty string for production (same origin)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+interface GenreInfo {
+  tags: string[];
+  confidence: number;
+  explanation: string[];
+  preset: {
+    density: number;
+    syncopation: number;
+    register: number;
+  };
+}
+
 interface AnalysisResult {
   bpm: number;
   scale: string;
   scale_score: number;
   histogram: number[];
+  genre?: GenreInfo;
 }
 
 interface Note {
@@ -156,6 +168,7 @@ export default function Home() {
               { stage: "groove", progress: 60, message: "Analyzing groove pattern..." },
               { stage: "groove", progress: 70, message: "Building rhythm histogram..." },
               { stage: "scale", progress: 80, message: "Detecting musical key..." },
+              { stage: "genre", progress: 90, message: "Classifying rhythm style..." },
             ];
             const nextStage = stages.find((s) => s.progress > prev.progress);
             return nextStage || prev;
@@ -452,6 +465,82 @@ export default function Home() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Genre Display */}
+                  {analysis.genre && (
+                    <div className="space-y-3 border-t border-white/5 pt-4">
+                      <span className="text-sm tracking-widest text-neutral-500 uppercase">
+                        Style
+                      </span>
+
+                      {/* Tags */}
+                      <div className="flex flex-wrap gap-2">
+                        {analysis.genre.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-sm border border-white/20 bg-white/5 px-3 py-1 text-xs font-medium tracking-wide text-white"
+                          >
+                            {tag.replace(/_/g, " ").toUpperCase()}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Confidence bar */}
+                      <div className="flex items-center gap-3">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className={`h-full transition-all ${
+                              analysis.genre.confidence > 0.6
+                                ? "bg-emerald-500"
+                                : analysis.genre.confidence > 0.4
+                                  ? "bg-yellow-500"
+                                  : "bg-red-500"
+                            }`}
+                            style={{
+                              width: `${analysis.genre.confidence * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-neutral-500">
+                          {(analysis.genre.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+
+                      {/* Collapsible explanation */}
+                      <details className="group cursor-pointer">
+                        <summary className="text-xs text-neutral-500 hover:text-neutral-400">
+                          View Details
+                        </summary>
+                        <ul className="mt-2 space-y-1 pl-4 text-xs text-neutral-400">
+                          {analysis.genre.explanation.map((bullet, i) => (
+                            <li key={i} className="list-disc">
+                              {bullet}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+
+                      {/* Apply Preset button */}
+                      <button
+                        onClick={() => {
+                          const preset = analysis.genre!.preset;
+                          // Convert normalized 0-1 to slider ranges
+                          setDensity(
+                            Math.round(4 + (16 - 4) * preset.density)
+                          );
+                          setSyncopation(preset.syncopation);
+                          // Map register: <0.34=low, 0.34-0.67=mid, >0.67=high
+                          if (preset.register < 0.34) setRegister("low");
+                          else if (preset.register < 0.67)
+                            setRegister("mid");
+                          else setRegister("high");
+                        }}
+                        className="w-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-medium tracking-wide text-white transition-all hover:bg-white/10"
+                      >
+                        Apply Preset →
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-4 text-neutral-600">
@@ -648,29 +737,11 @@ export default function Home() {
                             onSeekRef={seekRef}
                             controlsRef={synthControlsRef}
                             onPlayStateChange={handleSynthPlayStateChange}
+                            playTogetherEnabled={!!(audioUrl && waveformReady)}
+                            isPlayingTogether={isPlayingTogether}
+                            onTogglePlayTogether={togglePlayTogether}
                           />
                         </div>
-
-                        {/* Play Together Button */}
-                        {audioUrl && waveformReady && (
-                          <div className="flex justify-center pt-4">
-                            <button
-                              onClick={togglePlayTogether}
-                              className={`flex items-center gap-3 rounded-sm border px-8 py-4 text-sm font-medium tracking-wide transition-all ${
-                                isPlayingTogether
-                                  ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                              }`}
-                            >
-                              {isPlayingTogether ? (
-                                <Square size={18} fill="currentColor" />
-                              ) : (
-                                <Play size={18} fill="currentColor" />
-                              )}
-                              {isPlayingTogether ? "STOP TOGETHER" : "PLAY TOGETHER"}
-                            </button>
-                          </div>
-                        )}
                       </>
                     )}
                   </div>

@@ -12,13 +12,13 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy shared package first
-COPY ../packages/hookgen_core /packages/hookgen_core
+# Copy shared package first (now accessible from root context)
+COPY packages/hookgen_core /packages/hookgen_core
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ .
 
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app

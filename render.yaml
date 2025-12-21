@@ -3,11 +3,13 @@ services:
     name: hook-gen-api
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     healthCheckPath: /health
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
+
+
 
 
 

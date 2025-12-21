@@ -36,6 +36,11 @@ from .rhythm import (
 from .ui_helpers import (
     build_zip_name,
 )
+from .genre import (
+    classify_genre,
+    GenreResult,
+    GENRE_TEMPLATES,
+)
 
 __all__ = [
     # rhythm
@@ -67,6 +72,10 @@ __all__ = [
     "hooks_to_wav_bytes",
     # ui_helpers
     "build_zip_name",
+    # genre
+    "classify_genre",
+    "GenreResult",
+    "GENRE_TEMPLATES",
 ]
 
 

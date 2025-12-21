@@ -102,11 +102,19 @@ from hookgen_core import (
 
 router = APIRouter()
 
+class GenreInfo(BaseModel):
+    tags: List[str]
+    confidence: float
+    explanation: List[str]
+    preset: dict
+    debug: Optional[dict] = None
+
 class AnalysisResponse(BaseModel):
     bpm: float
     scale: Optional[str]
     scale_score: float
     histogram: List[float]
+    genre: Optional[GenreInfo] = None
 
 class GenerateRequest(BaseModel):
     bpm: float = Field(gt=0, le=300)
@@ -233,12 +241,35 @@ async def analyze_audio(file: UploadFile = File(...)):
                 None,
                 lambda: detect_scale_from_audio(audio_array, sample_rate)
             )
-            
+
+            # Genre classification
+            genre_info = None
+            try:
+                from hookgen_core import classify_genre
+                genre_result = await loop.run_in_executor(
+                    None,
+                    lambda: classify_genre(
+                        bpm=detected_bpm if detected_bpm else 120.0,
+                        histogram=np.asarray(histogram)
+                    )
+                )
+                genre_info = GenreInfo(
+                    tags=genre_result.tags,
+                    confidence=genre_result.confidence,
+                    explanation=genre_result.explanation,
+                    preset=genre_result.preset,
+                    debug=genre_result.debug if os.getenv("DEBUG_GENRE") == "true" else None
+                )
+            except Exception as e:
+                logger.warning(f"Genre classification failed: {e}")
+                genre_info = None
+
             return AnalysisResponse(
                 bpm=detected_bpm if detected_bpm else 120.0,
                 scale=suggested_scale,
                 scale_score=suggested_score,
-                histogram=histogram
+                histogram=histogram,
+                genre=genre_info
             )
         
         try:
@@ -491,21 +522,56 @@ async def analyze_audio_stream(file: UploadFile = File(...)):
                 "progress": 95,
                 "message": f"Detected key: {suggested_scale}" if suggested_scale else "Key detection complete"
             })
-            
-            # Stage 6: Complete (100%)
+
+            # Stage 6: Genre classification (95-98%)
+            yield sse_event("progress", {
+                "stage": "genre",
+                "progress": 95,
+                "message": "Classifying rhythm style..."
+            })
+
+            genre_info = None
+            try:
+                from hookgen_core import classify_genre
+                genre_result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: classify_genre(
+                            bpm=detected_bpm if detected_bpm else 120.0,
+                            histogram=np.asarray(histogram)
+                        )
+                    ),
+                    timeout=ANALYSIS_TIMEOUT_SECONDS
+                )
+                genre_info = {
+                    "tags": genre_result.tags,
+                    "confidence": genre_result.confidence,
+                    "explanation": genre_result.explanation,
+                    "preset": genre_result.preset,
+                }
+                logger.info(f"Genre classified: {genre_result.tags}")
+            except Exception as e:
+                logger.warning(f"Genre classification failed: {e}")
+                genre_info = None
+
+            # Stage 7: Complete (100%)
             yield sse_event("progress", {
                 "stage": "complete",
                 "progress": 100,
                 "message": "Analysis complete!"
             })
-            
+
             # Send final result
-            yield sse_event("result", {
+            result_data = {
                 "bpm": detected_bpm if detected_bpm else 120.0,
                 "scale": suggested_scale,
                 "scale_score": suggested_score,
-                "histogram": histogram
-            })
+                "histogram": histogram,
+            }
+            if genre_info:
+                result_data["genre"] = genre_info
+
+            yield sse_event("result", result_data)
             
         except Exception:
             logger.exception("Unhandled error in streaming analyze")

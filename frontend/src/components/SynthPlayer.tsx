@@ -24,9 +24,13 @@ interface SynthPlayerProps {
   onSeekRef?: React.MutableRefObject<((beat: number) => void) | null>; // Ref to expose seek function
   onPlayStateChange?: (isPlaying: boolean) => void;
   controlsRef?: React.MutableRefObject<SynthPlayerControls | null>;
+  // Play Together props
+  playTogetherEnabled?: boolean;
+  isPlayingTogether?: boolean;
+  onTogglePlayTogether?: () => void;
 }
 
-export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, onPlayStateChange, controlsRef }: SynthPlayerProps) {
+export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, onPlayStateChange, controlsRef, playTogetherEnabled, isPlayingTogether, onTogglePlayTogether }: SynthPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [preset, setPreset] = useState("pluck");
   const synthRef = useRef<Tone.PolySynth | null>(null);
@@ -279,6 +283,24 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
           )}
           {isPlaying ? "STOP" : "PLAY HOOK"}
         </button>
+
+        {playTogetherEnabled && onTogglePlayTogether && (
+          <button
+            onClick={onTogglePlayTogether}
+            className={`flex items-center gap-3 rounded-sm border px-6 py-3 text-sm font-medium tracking-wide transition-all ${
+              isPlayingTogether
+                ? "border-white/20 bg-white/10 text-white"
+                : "border-white bg-white text-black hover:bg-neutral-200"
+            }`}
+          >
+            {isPlayingTogether ? (
+              <Square size={16} fill="currentColor" />
+            ) : (
+              <Play size={16} fill="currentColor" />
+            )}
+            {isPlayingTogether ? "STOP TOGETHER" : "PLAY TOGETHER"}
+          </button>
+        )}
 
         <button
           onClick={downloadMidi}

@@ -14,7 +14,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6.svg)](https://www.typescriptlang.org/)
 
-[View Demo](https://hook-gen-nine.vercel.app/) • [Report Bug](https://github.com/cwklurks/hook-gen/issues) • [Request Feature](https://github.com/cwklurks/hook-gen/issues)
+[View Demo]([(https://hookgen.vercel.app/)]) • [Report Bug](https://github.com/cwklurks/hook-gen/issues) • [Request Feature](https://github.com/cwklurks/hook-gen/issues)
 
 </div>
 

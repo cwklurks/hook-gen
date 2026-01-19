@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import * as Tone from "tone";
 import { Play, Square, Settings2, Download } from "lucide-react";
 
@@ -17,6 +17,27 @@ export interface SynthPlayerControls {
   isPlaying: () => boolean;
 }
 
+// Stable audio level visualization bars to avoid render jitter
+// Pre-computed deterministic heights to avoid Math.random() during render
+const AUDIO_BAR_HEIGHTS = [76, 52, 88, 64, 70];
+
+function AudioLevelBars() {
+  return (
+    <div className="flex h-6 items-end gap-1">
+      {AUDIO_BAR_HEIGHTS.map((height, i) => (
+        <div
+          key={i}
+          className="w-0.5 animate-pulse rounded-full bg-white"
+          style={{
+            height: `${height}%`,
+            animationDelay: `${i * 0.1}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface SynthPlayerProps {
   notes: Note[];
   bpm: number;
@@ -30,7 +51,17 @@ interface SynthPlayerProps {
   onTogglePlayTogether?: () => void;
 }
 
-export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, onPlayStateChange, controlsRef, playTogetherEnabled, isPlayingTogether, onTogglePlayTogether }: SynthPlayerProps) {
+export default function SynthPlayer({
+  notes,
+  bpm,
+  onPlayheadUpdate,
+  onSeekRef,
+  onPlayStateChange,
+  controlsRef,
+  playTogetherEnabled,
+  isPlayingTogether,
+  onTogglePlayTogether,
+}: SynthPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [preset, setPreset] = useState("pluck");
   const synthRef = useRef<Tone.PolySynth | null>(null);
@@ -39,24 +70,27 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
   const onPlayStateChangeRef = useRef(onPlayStateChange);
 
   // Expose seek function via ref
-  const seekToBeat = (beat: number) => {
-    // Clamp beat to 0-16 range
-    const clampedBeat = Math.max(0, Math.min(16, beat));
+  const seekToBeat = useCallback(
+    (beat: number) => {
+      // Clamp beat to 0-16 range
+      const clampedBeat = Math.max(0, Math.min(16, beat));
 
-    // Convert beat to Tone.js time format: "bars:quarters:sixteenths"
-    const bar = Math.floor(clampedBeat / 4);
-    const beatInBar = clampedBeat % 4;
-    const quarter = Math.floor(beatInBar);
-    const sixteenth = Math.round((beatInBar - quarter) * 4);
+      // Convert beat to Tone.js time format: "bars:quarters:sixteenths"
+      const bar = Math.floor(clampedBeat / 4);
+      const beatInBar = clampedBeat % 4;
+      const quarter = Math.floor(beatInBar);
+      const sixteenth = Math.round((beatInBar - quarter) * 4);
 
-    const timeString = `${bar}:${quarter}:${sixteenth}`;
-    Tone.Transport.position = timeString;
+      const timeString = `${bar}:${quarter}:${sixteenth}`;
+      Tone.Transport.position = timeString;
 
-    // Update playhead immediately
-    if (onPlayheadUpdate) {
-      onPlayheadUpdate(clampedBeat);
-    }
-  };
+      // Update playhead immediately
+      if (onPlayheadUpdate) {
+        onPlayheadUpdate(clampedBeat);
+      }
+    },
+    [onPlayheadUpdate]
+  );
 
   useEffect(() => {
     if (onSeekRef) {
@@ -67,7 +101,7 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
         onSeekRef.current = null;
       }
     };
-  }, [onSeekRef, onPlayheadUpdate]);
+  }, [onSeekRef, seekToBeat]);
 
   // Keep onPlayStateChange ref updated
   useEffect(() => {
@@ -239,7 +273,7 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
 
   const downloadMidi = async () => {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${API_BASE}/export/midi`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -270,7 +304,8 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
       <div className="flex items-center gap-4">
         <button
           onClick={togglePlay}
-          className={`flex items-center gap-3 rounded-sm border px-6 py-3 text-sm font-medium tracking-wide transition-all ${
+          aria-label={isPlaying ? "Stop playback" : "Play hook"}
+          className={`flex items-center gap-3 rounded-sm border px-6 py-3 text-sm font-medium tracking-wide transition-all focus:outline-none focus:ring-2 focus:ring-white/50 ${
             isPlaying
               ? "border-white/20 bg-white/10 text-white"
               : "border-white bg-white text-black hover:bg-neutral-200"
@@ -304,38 +339,30 @@ export default function SynthPlayer({ notes, bpm, onPlayheadUpdate, onSeekRef, o
 
         <button
           onClick={downloadMidi}
-          className="flex items-center gap-3 rounded-sm border border-white/20 bg-white/5 px-6 py-3 text-sm font-medium tracking-wide text-white transition-all hover:bg-white/10"
+          aria-label="Download MIDI file"
+          className="flex items-center gap-3 rounded-sm border border-white/20 bg-white/5 px-6 py-3 text-sm font-medium tracking-wide text-white transition-all hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/50"
         >
           <Download size={16} />
           MIDI
         </button>
 
-        {isPlaying && (
-          <div className="flex h-6 items-end gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className="w-0.5 animate-pulse rounded-full bg-white"
-                style={{
-                  height: `${Math.random() * 100}%`,
-                  animationDelay: `${i * 0.1}s`,
-                }}
-              />
-            ))}
-          </div>
-        )}
+        {isPlaying && <AudioLevelBars />}
       </div>
 
       <div className="flex items-center gap-4 border-l border-white/10 px-4 py-2">
         <Settings2 size={16} className="text-neutral-500" />
         <div className="flex flex-col">
-          <label className="text-[10px] font-medium tracking-wider text-neutral-500 uppercase">
+          <label
+            htmlFor="synth-preset"
+            className="text-[10px] font-medium tracking-wider text-neutral-500 uppercase"
+          >
             Patch
           </label>
           <select
+            id="synth-preset"
             value={preset}
             onChange={(e) => setPreset(e.target.value)}
-            className="cursor-pointer appearance-none bg-transparent text-sm text-white transition-colors outline-none hover:text-neutral-300"
+            className="cursor-pointer appearance-none bg-transparent text-sm text-white transition-colors outline-none hover:text-neutral-300 focus:ring-1 focus:ring-white/30"
           >
             <option value="pluck" className="bg-black text-white">
               Pluck

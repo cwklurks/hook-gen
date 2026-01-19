@@ -1,16 +1,24 @@
+from typing import Any, BinaryIO, Union
+
 import librosa
 import numpy as np
+from numpy.typing import NDArray
 
 
-def load_mono(file, sr=22050):
+def load_mono(
+    file: Union[str, BinaryIO], sr: int = 22050
+) -> tuple[NDArray[np.floating[Any]], int]:
     """Load audio file as mono with normalization."""
-    y, sr = librosa.load(file, sr=sr, mono=True)
+    y, sr_out = librosa.load(file, sr=sr, mono=True)
     y, _ = librosa.effects.trim(y, top_db=30)
     rms = np.sqrt(np.mean(y**2)) + 1e-8
     y = y * (0.1 / rms)
-    return y, sr
+    return y, sr_out
 
-def estimate_bpm_and_beats(y, sr, fast_mode=False):
+
+def estimate_bpm_and_beats(
+    y: NDArray[np.floating[Any]], sr: int, fast_mode: bool = False
+) -> tuple[float, NDArray[np.floating[Any]]]:
     """
     Estimate BPM and beat positions from audio.
     
@@ -110,48 +118,55 @@ def estimate_bpm_and_beats(y, sr, fast_mode=False):
 
         return float(tempo_track), beat_times
 
-def ticks_from_beats(beat_times, subdiv=4):
+def ticks_from_beats(
+    beat_times: NDArray[np.floating[Any]], subdiv: int = 4
+) -> NDArray[np.floating[Any]]:
     """
     Generate subdivision ticks from beat times.
-    
+
     Args:
         beat_times: Array of beat times in seconds
         subdiv: Subdivisions per beat (4 = 16th notes)
-    
+
     Returns:
         Array of tick times in seconds
     """
     # subdiv=4 → 16th notes
     if len(beat_times) < 2:
         return np.array([])
-    tick_times = []
-    for i in range(len(beat_times)-1):
-        start, end = beat_times[i], beat_times[i+1]
+    tick_times: list[float] = []
+    for i in range(len(beat_times) - 1):
+        start, end = beat_times[i], beat_times[i + 1]
         seg = np.linspace(start, end, subdiv, endpoint=False)
         tick_times.extend(seg.tolist())
     return np.array(tick_times)
 
-def groove_histogram(y, sr, tick_times):
+
+def groove_histogram(
+    y: NDArray[np.floating[Any]], sr: int, tick_times: NDArray[np.floating[Any]]
+) -> NDArray[np.floating[Any]]:
     """
     Generate a groove histogram from audio and tick times.
-    
+
     Maps detected onsets to the nearest 16th-note position.
-    
+
     Args:
         y: Audio signal
         sr: Sample rate
         tick_times: Array of tick times (typically from ticks_from_beats)
-    
+
     Returns:
         16-element histogram normalized to sum to 1.0
     """
     onsets = librosa.onset.onset_detect(y=y, sr=sr, units="time")
     if tick_times.size == 0:
-        return np.ones(16)/16
+        return np.ones(16) / 16
     hist = np.zeros(16)
     for t in onsets:
         idx = np.argmin(np.abs(tick_times - t))
         hist[idx % 16] += 1
-    return hist / hist.sum() if hist.sum() > 0 else np.ones(16)/16
+    return hist / hist.sum() if hist.sum() > 0 else np.ones(16) / 16
+
+
 
 

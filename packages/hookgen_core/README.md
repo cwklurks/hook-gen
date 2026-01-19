@@ -46,3 +46,5 @@ hook = generate_structured_hook(histogram, scale=scale, density=7)
 - `pkg_resources`: Minimal pkg_resources shim
 
 
+
+

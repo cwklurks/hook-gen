@@ -44,7 +44,7 @@ interface ExampleFile {
   description: string;
 }
 
-interface AnalysisProgress {
+interface AnalysisProgressState {
   stage: string;
   progress: number;
   message: string;
@@ -57,7 +57,7 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Progress tracking for analysis
-  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress>({
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressState>({
     stage: "validating",
     progress: 0,
     message: "Starting...",
@@ -84,6 +84,17 @@ export default function Home() {
   const [waveformReady, setWaveformReady] = useState(false);
 
   const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
+  const MAX_FILE_SIZE_MB = 100;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+  // Cleanup object URLs to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
 
   // Toggle synchronized playback of both audio and MIDI
   const togglePlayTogether = async () => {
@@ -222,6 +233,12 @@ export default function Home() {
       const fileExt = fileName.substring(fileName.lastIndexOf("."));
       if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
         setUploadError("Unsupported file type. Please upload a WAV, MP3, or MP4 file.");
+        return;
+      }
+
+      // Validate file size
+      if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
+        setUploadError(`File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
         return;
       }
 
@@ -367,13 +384,14 @@ export default function Home() {
             {/* Upload Area */}
             <div className="flex h-full flex-col gap-6 rounded-lg border border-white/10 bg-white/[0.02] p-6">
               <div
-                className={`group relative min-h-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border-2 border-dashed transition-all ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}
+                className={`group relative min-h-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border-2 border-dashed transition-all focus-within:ring-2 focus-within:ring-white/30 ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}
               >
                 <input
                   type="file"
                   onChange={handleFileUpload}
                   accept=".wav,.mp3,.mp4,.m4a,audio/wav,audio/mpeg,audio/mp4"
                   className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+                  aria-label="Upload audio file"
                 />
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
                   <div
@@ -409,7 +427,9 @@ export default function Home() {
                         key={example.filename}
                         onClick={() => handleExampleSelect(example)}
                         disabled={isAnalyzing}
-                        className={`group relative overflow-hidden rounded-md border p-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                        aria-pressed={selectedExample === example.filename}
+                        aria-label={`Load example: ${example.name}`}
+                        className={`group relative overflow-hidden rounded-md border p-2 text-left transition-all focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedExample === example.filename
                             ? "border-white/30 bg-white/10 text-white"
                             : "border-white/5 bg-white/[0.02] text-neutral-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-neutral-200"
@@ -525,14 +545,11 @@ export default function Home() {
                         onClick={() => {
                           const preset = analysis.genre!.preset;
                           // Convert normalized 0-1 to slider ranges
-                          setDensity(
-                            Math.round(4 + (16 - 4) * preset.density)
-                          );
+                          setDensity(Math.round(4 + (16 - 4) * preset.density));
                           setSyncopation(preset.syncopation);
                           // Map register: <0.34=low, 0.34-0.67=mid, >0.67=high
                           if (preset.register < 0.34) setRegister("low");
-                          else if (preset.register < 0.67)
-                            setRegister("mid");
+                          else if (preset.register < 0.67) setRegister("mid");
                           else setRegister("high");
                         }}
                         className="w-full border border-white/20 bg-white/5 px-4 py-2 text-xs font-medium tracking-wide text-white transition-all hover:bg-white/10"

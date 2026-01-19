@@ -21,7 +21,12 @@ interface WaveformProps {
   controlsRef?: React.MutableRefObject<WaveformControls | null>;
 }
 
-export default function Waveform({ audioUrl, onReady, onPlayStateChange, controlsRef }: WaveformProps) {
+export default function Waveform({
+  audioUrl,
+  onReady,
+  onPlayStateChange,
+  controlsRef,
+}: WaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const onReadyRef = useRef(onReady);
@@ -172,12 +177,13 @@ export default function Waveform({ audioUrl, onReady, onPlayStateChange, control
         <button
           onClick={togglePlay}
           disabled={!isReady}
-          className="flex items-center gap-3 rounded-sm border border-white/10 bg-white/5 px-6 py-2 transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={isPlaying ? "Pause audio loop" : "Play audio loop"}
+          className="flex items-center gap-3 rounded-sm border border-white/10 bg-white/5 px-6 py-2 transition-all hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPlaying ? (
             <Pause size={16} className="text-white" />
           ) : (
-            <Play size={16} className="ml-1 text-white" />
+            <Play size={16} className="text-white" />
           )}
           <span className="text-sm font-medium tracking-wide">
             {isPlaying ? "PAUSE LOOP" : "PLAY LOOP"}

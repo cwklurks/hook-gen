@@ -97,3 +97,42 @@ body {
 [data-nextjs-toast] {
   display: none !important;
 }
+
+/* Floating music notes animation */
+@keyframes float-music {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: var(--float-opacity, 0.2);
+  }
+  25% {
+    transform: translateY(-20px) rotate(5deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-5deg);
+    opacity: calc(var(--float-opacity, 0.2) * 1.5);
+  }
+  75% {
+    transform: translateY(-25px) rotate(3deg);
+  }
+}
+
+.animate-float-music {
+  animation: float-music var(--duration, 15s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-music,
+  .animate-pulse,
+  .animate-spin {
+    animation: none;
+  }
+
+  .transition-all,
+  .transition-transform,
+  .transition-colors {
+    transition: none;
+  }
+}

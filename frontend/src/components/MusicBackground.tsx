@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 const NOTES = ["♪", "♫", "♩", "♬", "♭", "♮", "♯"];
 
@@ -15,27 +15,40 @@ interface FloatingNote {
   opacity: number;
 }
 
-export default function MusicBackground() {
-  const [notes, setNotes] = useState<FloatingNote[]>([]);
+function generateNotes(): FloatingNote[] {
+  return Array.from({ length: 20 }).map((_, i) => {
+    const randomIndex = Math.floor(Math.random() * NOTES.length);
+    const char = NOTES[randomIndex];
+    return {
+      id: i,
+      char: char ?? NOTES[0] ?? "♪",
+      x: Math.random() * 100, // vw
+      y: Math.random() * 100, // vh
+      size: Math.random() * 2 + 1, // rem
+      duration: Math.random() * 20 + 10, // seconds
+      delay: Math.random() * -20, // negative delay to start mid-animation
+      opacity: Math.random() * 0.3 + 0.1,
+    };
+  });
+}
 
-  useEffect(() => {
-    // Generate random notes on client-side only to avoid hydration mismatch
-    const newNotes: FloatingNote[] = Array.from({ length: 20 }).map((_, i) => {
-      const randomIndex = Math.floor(Math.random() * NOTES.length);
-      const char = NOTES[randomIndex];
-      return {
-        id: i,
-        char: char ?? NOTES[0] ?? "♪",
-        x: Math.random() * 100, // vw
-        y: Math.random() * 100, // vh
-        size: Math.random() * 2 + 1, // rem
-        duration: Math.random() * 20 + 10, // seconds
-        delay: Math.random() * -20, // negative delay to start mid-animation
-        opacity: Math.random() * 0.3 + 0.1,
-      };
-    });
-    setNotes(newNotes);
-  }, []);
+// React 18+ pattern for detecting client-side mount without useEffect setState
+const emptySubscribe = () => () => {};
+
+export default function MusicBackground() {
+  // useSyncExternalStore with different server/client values is the React 18+ way
+  // to handle hydration-safe client-only rendering without setState in useEffect
+  const isMounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true, // Client value
+    () => false // Server value
+  );
+
+  // Generate notes only on client-side to avoid hydration mismatch
+  const notes = useMemo(() => {
+    if (!isMounted) return [];
+    return generateNotes();
+  }, [isMounted]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -47,10 +60,10 @@ export default function MusicBackground() {
             left: `${note.x}vw`,
             top: `${note.y}vh`,
             fontSize: `${note.size}rem`,
-            opacity: note.opacity,
-            animationDuration: `${note.duration}s`,
-            animationDelay: `${note.delay}s`,
-          }}
+            "--float-opacity": note.opacity,
+            "--duration": `${note.duration}s`,
+            "--delay": `${note.delay}s`,
+          } as React.CSSProperties}
         >
           {note.char}
         </div>

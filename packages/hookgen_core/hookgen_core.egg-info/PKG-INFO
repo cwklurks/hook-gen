@@ -67,3 +67,6 @@ hook = generate_structured_hook(histogram, scale=scale, density=7)
 - `ui_helpers`: UI utility functions
 - `pkg_resources`: Minimal pkg_resources shim
 
+
+
+

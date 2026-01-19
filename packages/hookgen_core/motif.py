@@ -1,17 +1,20 @@
+from typing import Any, Callable
+
 import librosa
 import numpy as np
+from numpy.typing import NDArray
 
 # Interval patterns are defined relative to the root and reused for any key.
-SCALE_PATTERNS = {
+SCALE_PATTERNS: dict[str, list[int]] = {
     "major": [0, 2, 4, 5, 7, 9, 11],
     "minor": [0, 2, 3, 5, 7, 8, 10],  # natural minor
 }
 
 # Ordered to give users a practical mix of sharp and flat keys.
-SCALE_ROOTS = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
+SCALE_ROOTS: list[str] = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 
 # Map enharmonic spellings to semitone offsets from C.
-NOTE_TO_SEMITONE = {
+NOTE_TO_SEMITONE: dict[str, int] = {
     "C": 0,
     "C#": 1, "Db": 1,
     "D": 2,
@@ -36,32 +39,33 @@ DEFAULT_SCALE = "C minor"
 KS_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
 KS_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
-def _build_scale_templates():
+
+def _build_scale_templates() -> dict[str, NDArray[np.floating[Any]]]:
     """Build scale templates using Krumhansl-Schmuckler profiles (more accurate)."""
-    templates = {}
+    templates: dict[str, NDArray[np.floating[Any]]] = {}
     for root in SCALE_ROOTS:
         root_offset = NOTE_TO_SEMITONE[root]
-        
+
         # Major
         vec_major = np.roll(KS_MAJOR, root_offset)
         templates[f"{root} major"] = vec_major / (np.linalg.norm(vec_major) + 1e-9)
-        
+
         # Minor
         vec_minor = np.roll(KS_MINOR, root_offset)
         templates[f"{root} minor"] = vec_minor / (np.linalg.norm(vec_minor) + 1e-9)
-            
+
     return templates
 
 
 SCALE_TEMPLATES = _build_scale_templates()
 
 
-def list_available_scales():
+def list_available_scales() -> list[str]:
     """Return the scales the app can generate, keeping UI and pitch logic in sync."""
     return [f"{root} {quality}" for root in SCALE_ROOTS for quality in ("major", "minor")]
 
 
-def _parse_scale(scale: str):
+def _parse_scale(scale: str) -> tuple[str, str, list[int]]:
     """Normalize the scale string and return (root, quality, intervals)."""
     if not scale:
         scale = DEFAULT_SCALE
@@ -83,7 +87,13 @@ def _parse_scale(scale: str):
 
     return root, quality, SCALE_PATTERNS[quality]
 
-def sample_rhythm(hist16, density=7, syncopation=0.5, seed=0):
+
+def sample_rhythm(
+    hist16: NDArray[np.floating[Any]],
+    density: int = 7,
+    syncopation: float = 0.5,
+    seed: int = 0,
+) -> list[tuple[int, int]]:
     """
     Sample a rhythm pattern from the groove histogram.
     
@@ -117,12 +127,12 @@ def sample_rhythm(hist16, density=7, syncopation=0.5, seed=0):
     return list(zip(onsets, durs, strict=True))
 
 
-def midi_mapper(scale: str, base_octave: int = 4):
+def midi_mapper(scale: str, base_octave: int = 4) -> Callable[[int], int]:
     """Create a function that maps scale degree indices to MIDI pitches."""
     root, _, degrees = _parse_scale(scale)
     root_midi = base_octave * 12 + NOTE_TO_SEMITONE[root]
 
-    def fn(step_idx):
+    def fn(step_idx: int) -> int:
         octave = step_idx // len(degrees)
         deg = degrees[step_idx % len(degrees)]
         return root_midi + 12 * octave + deg
@@ -130,7 +140,7 @@ def midi_mapper(scale: str, base_octave: int = 4):
     return fn
 
 
-def _fit_to_register(pitch: int, register):
+def _fit_to_register(pitch: int, register: tuple[int, int]) -> int:
     """Shift pitch up or down by octaves to fit within the register range."""
     while pitch < register[0]:
         pitch += 12
@@ -139,7 +149,14 @@ def _fit_to_register(pitch: int, register):
     return pitch
 
 
-def assign_pitches(events, scale="C minor", register=(55,76), step_prob=0.8, max_leap=4, seed=0):
+def assign_pitches(
+    events: list[tuple[int, int]],
+    scale: str = "C minor",
+    register: tuple[int, int] = (55, 76),
+    step_prob: float = 0.8,
+    max_leap: int = 4,
+    seed: int = 0,
+) -> list[tuple[int, int, int]]:
     """
     Assign pitches to rhythmic events (hook-aid API).
     
@@ -157,13 +174,13 @@ def assign_pitches(events, scale="C minor", register=(55,76), step_prob=0.8, max
     rng = np.random.default_rng(seed)
     _, _, degrees = _parse_scale(scale)
     to_midi = midi_mapper(scale)
-    idx = rng.integers(0, len(degrees))
-    notes = []
+    idx: int = int(rng.integers(0, len(degrees)))
+    notes: list[tuple[int, int, int]] = []
     for onset, dur in events:
         if rng.random() < step_prob:
-            idx += rng.choice([-1,1])
+            idx += int(rng.choice([-1, 1]))
         else:
-            idx += rng.integers(-max_leap, max_leap+1)
+            idx += int(rng.integers(-max_leap, max_leap + 1))
         idx = max(0, idx)
         pitch = _fit_to_register(to_midi(idx), register)
         notes.append((int(onset), int(dur), int(pitch)))
@@ -174,10 +191,17 @@ def assign_pitches(events, scale="C minor", register=(55,76), step_prob=0.8, max
     return notes
 
 
-def generate_motif(histogram, scale="C minor", register=(55, 76), density=7, syncopation=0.5, seed=0):
+def generate_motif(
+    histogram: NDArray[np.floating[Any]],
+    scale: str = "C minor",
+    register: tuple[int, int] = (55, 76),
+    density: int = 7,
+    syncopation: float = 0.5,
+    seed: int = 0,
+) -> list[dict[str, int]]:
     """
     Generate a single bar motif with rhythm from histogram and pitches from scale (backend API).
-    
+
     Returns notes as list of dicts with 'start', 'duration', 'pitch', 'velocity' keys.
     """
     rng = np.random.default_rng(seed)
@@ -188,30 +212,35 @@ def generate_motif(histogram, scale="C minor", register=(55, 76), density=7, syn
     # Assign pitches
     _, _, degrees = _parse_scale(scale)
     to_midi = midi_mapper(scale)
-    idx = rng.integers(0, len(degrees))
-    
-    notes = []
+    idx: int = int(rng.integers(0, len(degrees)))
+
+    notes: list[dict[str, int]] = []
     step_prob = 0.8
     max_leap = 4
-    
+
     for onset, dur in events:
         if rng.random() < step_prob:
-            idx += rng.choice([-1, 1])
+            idx += int(rng.choice([-1, 1]))
         else:
-            idx += rng.integers(-max_leap, max_leap + 1)
+            idx += int(rng.integers(-max_leap, max_leap + 1))
         idx = max(0, idx)
         pitch = _fit_to_register(to_midi(idx), register)
         notes.append({
             "start": int(onset),
             "duration": int(dur),
             "pitch": int(pitch),
-            "velocity": int(80 + rng.integers(-10, 10))
+            "velocity": int(80 + int(rng.integers(-10, 10)))
         })
     
     return notes
 
 
-def vary_motif(motif, scale="C minor", register=(55, 76), seed=0):
+def vary_motif(
+    motif: list[dict[str, int]],
+    scale: str = "C minor",
+    register: tuple[int, int] = (55, 76),
+    seed: int = 0,
+) -> list[dict[str, int]]:
     """Create a variation of the motif by slightly altering pitches and rhythms."""
     rng = np.random.default_rng(seed)
     _, _, degrees = _parse_scale(scale)
@@ -242,10 +271,17 @@ def vary_motif(motif, scale="C minor", register=(55, 76), seed=0):
     
     return varied
 
-def generate_structured_hook(histogram, scale="C minor", register=(55,76), density=7, syncopation=0.5, seed=0):
+def generate_structured_hook(
+    histogram: NDArray[np.floating[Any]],
+    scale: str = "C minor",
+    register: tuple[int, int] = (55, 76),
+    density: int = 7,
+    syncopation: float = 0.5,
+    seed: int = 0,
+) -> list[dict[str, int]]:
     """
     Generate a 4-bar hook with A-A-B-A structure (backend API).
-    
+
     Returns list of note dicts with musical resolution to tonic.
     """
     
@@ -310,16 +346,20 @@ def generate_structured_hook(histogram, scale="C minor", register=(55,76), densi
     return full_hook
 
 
-def detect_scale_from_audio(y, sr, fast_mode=False):
+def detect_scale_from_audio(
+    y: NDArray[np.floating[Any]] | None,
+    sr: int | None,
+    fast_mode: bool = False,
+) -> tuple[str | None, float]:
     """
     Return (scale, score) using a chroma template match; None if inconclusive.
-    
+
     Args:
         y: Audio signal
         sr: Sample rate
         fast_mode: If True, use chroma_stft (fast but less accurate).
                    If False (default), use hpss + chroma_cqt (accurate but slower).
-    
+
     Returns:
         (scale_name, confidence_score) or (None, score) if inconclusive
     """

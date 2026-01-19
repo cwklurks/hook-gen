@@ -149,7 +149,7 @@ if audio_array is not None:
     reg_map = {"low": (48, 69), "mid": (55, 76), "high": (62, 84)}
     hooks = []
     for i in range(5):
-        events = sample_rhythm(histogram, density=density, syncopation=sync, seed=base_seed + i)
+        events = sample_rhythm(histogram, density=density, syncopation=sync, seed=base_seed + i)  # type: ignore[arg-type]
         notes = assign_pitches(events, scale=scale, register=reg_map[register], seed=base_seed + i)
         hooks.append(notes)
 

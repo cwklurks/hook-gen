@@ -5,3 +5,4 @@ hookgen_core.egg-info/SOURCES.txt
 hookgen_core.egg-info/dependency_links.txt
 hookgen_core.egg-info/requires.txt
 hookgen_core.egg-info/top_level.txt
+tests/test_genre.py

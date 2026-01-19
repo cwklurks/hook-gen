@@ -10,18 +10,17 @@ Usage:
   python tune_genre.py /path/to/audio.wav --output-template
 """
 
-import sys
 import argparse
-import json
+import sys
+
 import librosa
 import numpy as np
-
 from hookgen_core import (
+    GENRE_TEMPLATES,
+    classify_genre,
     estimate_bpm_and_beats,
     groove_histogram,
     ticks_from_beats,
-    classify_genre,
-    GENRE_TEMPLATES,
 )
 
 
@@ -31,9 +30,7 @@ def format_histogram(h: np.ndarray) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Debug and tune genre classification"
-    )
+    parser = argparse.ArgumentParser(description="Debug and tune genre classification")
     parser.add_argument("audio_file", help="Path to audio file")
     parser.add_argument(
         "--expected",
@@ -70,61 +67,64 @@ def main():
     print("\nClassifying genre...")
     result = classify_genre(bpm, histogram)
 
-    print(f"\n{'='*70}")
-    print(f"GENRE CLASSIFICATION RESULT")
-    print(f"{'='*70}")
+    print(f"\n{'=' * 70}")
+    print("GENRE CLASSIFICATION RESULT")
+    print(f"{'=' * 70}")
     print(f"Tags: {', '.join(result.tags)}")
     print(f"Confidence: {result.confidence:.2%}")
 
-    print(f"\nExplanation:")
+    print("\nExplanation:")
     for i, bullet in enumerate(result.explanation, 1):
         print(f"  {i}. {bullet}")
 
-    print(f"\nPreset Parameters (normalized 0-1):")
+    print("\nPreset Parameters (normalized 0-1):")
     for key, val in result.preset.items():
         print(f"  {key:15s}: {val:.2f}")
 
     # Debug info
-    print(f"\n{'='*70}")
-    print(f"DEBUG INFORMATION")
-    print(f"{'='*70}")
+    print(f"\n{'=' * 70}")
+    print("DEBUG INFORMATION")
+    print(f"{'=' * 70}")
 
-    print(f"\nExtracted Features:")
+    print("\nExtracted Features:")
     for key, val in sorted(result.debug["features"].items()):
         print(f"  {key:20s}: {val:8.4f}")
 
-    print(f"\nGenre Scores:")
+    print("\nGenre Scores:")
     for tag in sorted(result.debug["genre_breakdowns"].keys()):
         breakdown = result.debug["genre_breakdowns"][tag]
         print(f"\n  {tag}:")
         print(f"    Combined Score: {breakdown['combined_score']:8.4f}")
-        print(f"    Template Sim:   {breakdown['template_similarity']:8.4f} (shift={breakdown['best_shift']:+2d})")
-        print(f"    BPM Score:      {breakdown['bpm_score']:8.4f} ({breakdown['bpm_interpretation']})")
+        print(
+            f"    Template Sim:   {breakdown['template_similarity']:8.4f} "
+            f"(shift={breakdown['best_shift']:+2d})"
+        )
+        print(
+            f"    BPM Score:      {breakdown['bpm_score']:8.4f} ({breakdown['bpm_interpretation']})"
+        )
         print(f"    Feature Match:  {breakdown['feature_match']:8.4f}")
 
-    print(f"\nGenre Probabilities:")
-    for tag, prob in sorted(
-        result.debug["probabilities"].items(), key=lambda x: -x[1]
-    )[:5]:
+    print("\nGenre Probabilities:")
+    for tag, prob in sorted(result.debug["probabilities"].items(), key=lambda x: -x[1])[:5]:
         bar_width = int(prob * 40)
         bar = "█" * bar_width + "░" * (40 - bar_width)
         print(f"  {tag:25s} {bar} {prob:.2%}")
 
-    print(f"\nConfidence Analysis:")
+    print("\nConfidence Analysis:")
     print(f"  Top probability:     {result.debug['top_prob']:.2%}")
     print(f"  Second probability:  {result.debug['second_prob']:.2%}")
     print(f"  Probability gap:     {result.debug['prob_gap']:.2%}")
 
     # Check against expected
     if args.expected:
-        print(f"\n{'='*70}")
-        print(f"VALIDATION")
-        print(f"{'='*70}")
+        print(f"\n{'=' * 70}")
+        print("VALIDATION")
+        print(f"{'=' * 70}")
         if args.expected in result.tags:
             print(f"✓ CORRECT: Expected {args.expected}, got {result.tags}")
         else:
             print(f"✗ INCORRECT: Expected {args.expected}, got {result.tags}")
-            print(f"\nExpected tag breakdown:")
+            print("\nExpected tag breakdown:")
             if args.expected in result.debug["genre_breakdowns"]:
                 breakdown = result.debug["genre_breakdowns"][args.expected]
                 print(f"  Combined Score:  {breakdown['combined_score']:8.4f}")
@@ -135,10 +135,13 @@ def main():
                 print(f"\nFeature Expectations for {args.expected}:")
                 config = GENRE_TEMPLATES[args.expected]
                 features = result.debug["features"]
-                for feature_name, (target, tol, weight) in config["features"].items():
+                for (
+                    feature_name,
+                    (target, tol, _weight),
+                ) in config["features"].items():  # type: ignore[attr-defined]
                     if feature_name in features:
                         actual = features[feature_name]
-                        score = np.exp(-((actual - target) / tol) ** 2)
+                        score = np.exp(-(((actual - target) / tol) ** 2))
                         diff = actual - target
                         status = "✓" if score > 0.7 else "✗"
                         print(
@@ -151,10 +154,10 @@ def main():
 
     # Output template
     if args.output_template:
-        print(f"\n{'='*70}")
-        print(f"EXTRACTED TEMPLATE")
-        print(f"{'='*70}")
-        print(f'Copy this into GENRE_TEMPLATES in genre.py:')
+        print(f"\n{'=' * 70}")
+        print("EXTRACTED TEMPLATE")
+        print(f"{'=' * 70}")
+        print("Copy this into GENRE_TEMPLATES in genre.py:")
         print(f'"template": {list(histogram)},')
 
     print()

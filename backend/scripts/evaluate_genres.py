@@ -12,19 +12,17 @@ Usage:
 
 import sys
 from pathlib import Path
-import librosa
-import numpy as np
 
+import librosa
 from hookgen_core import (
+    classify_genre,
     estimate_bpm_and_beats,
     groove_histogram,
     ticks_from_beats,
-    classify_genre,
 )
 
-
 # Expected labels for golden files (add as you validate)
-EXPECTED_LABELS = {
+EXPECTED_LABELS: dict[str, str] = {
     # "fouronthefloor_124bpm.wav": "house_four_on_floor",
     # "reggaeton_96bpm.wav": "reggaeton_dembow",
     # "halftime_70bpm.wav": "trap_halftime",
@@ -81,7 +79,7 @@ def main():
 
             if expected is None:
                 status = "?"
-                detail = f"No expectation"
+                detail = "No expectation"
             elif correct:
                 status = "✓"
                 detail = "Correct"
@@ -107,7 +105,7 @@ def main():
 
     # Summary
     print(f"\n{'='*90}")
-    print(f"SUMMARY")
+    print("SUMMARY")
     print(f"{'='*90}")
 
     labeled = [r for r in results if r["correct"] is not None]

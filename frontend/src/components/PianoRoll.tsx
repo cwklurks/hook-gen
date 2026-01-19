@@ -106,7 +106,7 @@ export default function PianoRoll({
         const playheadX = displayBeat * beatWidth;
 
         // Draw vertical line with slight glow effect when dragging
-        ctx.strokeStyle = isDragging ? "#ffffff" : "#ffffff";
+        ctx.strokeStyle = isDragging ? "#a5b4fc" : "#ffffff"; // Indigo tint when dragging
         ctx.lineWidth = isDragging ? 3 : 2;
         ctx.shadowBlur = isDragging ? 10 : 0;
         ctx.shadowColor = "#ffffff";
@@ -232,8 +232,15 @@ export default function PianoRoll({
     <div
       ref={containerRef}
       className="w-full overflow-hidden rounded-sm border border-white/5 bg-white/[0.02]"
+      role="img"
+      aria-label={`Piano roll visualization showing ${notes.length} notes. Click or drag to seek.`}
     >
-      <canvas ref={canvasRef} height={height} className="block h-full w-full" />
+      <canvas
+        ref={canvasRef}
+        height={height}
+        className="block h-full w-full"
+        aria-hidden="true"
+      />
     </div>
   );
 }

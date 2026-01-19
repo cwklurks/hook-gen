@@ -204,7 +204,7 @@ def extract_rhythm_features(histogram: np.ndarray, bpm: float) -> Dict[str, floa
 def compute_template_similarity(
     histogram: np.ndarray,
     template: np.ndarray,
-    search_shifts: List[int] = None,
+    search_shifts: Optional[List[int]] = None,
 ) -> Tuple[float, int]:
     """
     Compute best cosine similarity with circular shift search.
@@ -364,18 +364,25 @@ def classify_genre(
         "genre_breakdowns": {},
     }
 
-    for tag, config in GENRE_TEMPLATES.items():
+    for tag, config in GENRE_TEMPLATES.items():  # type: ignore[attr-defined]
         # 1. Template matching (55% weight)
-        template_sim, best_shift = compute_template_similarity(h, config["template"])
+        template = np.array(config["template"])  # type: ignore[index]
+        template_sim, best_shift = compute_template_similarity(h, template)
 
         # 2. BPM prior (25% weight)
-        bpm_center, bpm_sigma = config["bpm_prior"]
+        bpm_prior = config["bpm_prior"]  # type: ignore[index]
+        bpm_center = float(bpm_prior[0])  # type: ignore[index]
+        bpm_sigma = float(bpm_prior[1])  # type: ignore[index]
         bpm_score, adjusted_bpm, bpm_interp = compute_bpm_score(
             bpm, bpm_center, bpm_sigma
         )
 
         # 3. Feature matching (20% weight)
-        feature_scores = compute_feature_match_score(features, config["features"])
+        feature_expectations: Dict[str, Tuple[float, float, float]] = {
+            k: (float(v[0]), float(v[1]), float(v[2]))
+            for k, v in config["features"].items()  # type: ignore[attr-defined]
+        }
+        feature_scores = compute_feature_match_score(features, feature_expectations)
         feature_match = feature_scores["aggregate"]
 
         # Combined score
@@ -384,7 +391,7 @@ def classify_genre(
         genre_scores[tag] = combined
 
         # Store debug info
-        debug_info["genre_breakdowns"][tag] = {
+        debug_info["genre_breakdowns"][tag] = {  # type: ignore[index, assignment]
             "template_similarity": float(template_sim),
             "best_shift": int(best_shift),
             "bpm_score": float(bpm_score),
@@ -413,12 +420,12 @@ def classify_genre(
     second_prob = sorted_probs[1] if len(sorted_probs) > 1 else 0.0
     prob_gap = top_prob - second_prob
 
-    debug_info["probabilities"] = {
-        tag: float(prob) for tag, prob in zip(sorted_tags, sorted_probs)
-    }
-    debug_info["top_prob"] = float(top_prob)
-    debug_info["second_prob"] = float(second_prob)
-    debug_info["prob_gap"] = float(prob_gap)
+    debug_info["probabilities"] = dict(  # type: ignore[assignment]
+        {tag: float(prob) for tag, prob in zip(sorted_tags, sorted_probs)}
+    )
+    debug_info["top_prob"] = top_prob  # type: ignore[assignment]
+    debug_info["second_prob"] = second_prob  # type: ignore[assignment]
+    debug_info["prob_gap"] = prob_gap  # type: ignore[assignment]
 
     # Determine tags and explanations
     if top_prob < CONFIDENCE_THRESHOLD or prob_gap < AMBIGUITY_THRESHOLD:
@@ -439,15 +446,18 @@ def classify_genre(
 
         # Generate explanation for top tag
         top_tag = result_tags[0]
+        genre_breakdown: Dict[str, Any] = debug_info["genre_breakdowns"][top_tag]  # type: ignore[index, assignment]
+        genre_config: Dict[str, Any] = dict(GENRE_TEMPLATES[top_tag])  # type: ignore[arg-type]
         explanation = _generate_explanation(
             top_tag,
             features,
-            debug_info["genre_breakdowns"][top_tag],
-            GENRE_TEMPLATES[top_tag],
+            genre_breakdown,
+            genre_config,
         )
 
         # Get preset from top tag
-        preset = GENRE_TEMPLATES[top_tag]["preset"].copy()
+        preset_data = GENRE_TEMPLATES[top_tag]["preset"]  # type: ignore[index]
+        preset = dict(preset_data)  # type: ignore[arg-type]
 
     return GenreResult(
         tags=result_tags,

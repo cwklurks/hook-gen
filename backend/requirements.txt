@@ -8,6 +8,7 @@ uvicorn
 python-multipart
 pydantic
 soundfile
+slowapi
 
 # Development dependencies
 ruff

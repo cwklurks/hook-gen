@@ -12,8 +12,10 @@ from typing import List, Literal, Optional
 import librosa
 import numpy as np
 import soundfile as sf
+from api.errors import ErrorCode, ErrorResponse, create_error_response, create_sse_error
+from api.rate_limit import ANALYZE_RATE_LIMIT, GENERATE_RATE_LIMIT, limiter
 from app.database import get_session, save_session
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from hookgen_core import (
     detect_scale_from_audio,
@@ -49,9 +51,10 @@ def get_examples_dir() -> Path:
 EXAMPLES_DIR = get_examples_dir()
 
 # Configuration constants
-MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB default
+MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB limit
 AUDIO_PROCESSING_TIMEOUT_SECONDS = 120  # 120 seconds timeout for audio processing
 MAX_AUDIO_DURATION_SECONDS = 8  # Only analyze first 8 seconds (enough for BPM/scale)
+MAX_UPLOAD_DURATION_SECONDS = 30  # Reject files longer than 30 seconds
 AUDIO_DECODE_TIMEOUT_SECONDS = 45  # Decode timeout
 ANALYSIS_TIMEOUT_SECONDS = 45  # Tempo/groove/scale analysis timeout
 
@@ -163,8 +166,20 @@ def sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-@router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
+@router.post(
+    "/analyze",
+    response_model=AnalysisResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid request (bad format, empty file)"},
+        408: {"model": ErrorResponse, "description": "Processing timeout"},
+        413: {"model": ErrorResponse, "description": "File too large"},
+        422: {"model": ErrorResponse, "description": "Unprocessable audio"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+@limiter.limit(ANALYZE_RATE_LIMIT)
+async def analyze_audio(request: Request, file: UploadFile = File(...)):  # noqa: B008
     """Non-streaming analyze endpoint."""
     logger.info(f"[ANALYZE-SIMPLE] Request received: {file.filename}, {file.content_type}")
 
@@ -173,10 +188,12 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
         # Validate content type
         if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
             logger.warning(f"Rejected file with invalid content-type: {file.content_type}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid content type. Allowed types: "
-                f"{', '.join(sorted(ALLOWED_CONTENT_TYPES))}",
+            raise create_error_response(
+                ErrorCode.UNSUPPORTED_FORMAT,
+                details={
+                    "content_type": file.content_type,
+                    "allowed": sorted(ALLOWED_CONTENT_TYPES),
+                },
             )
 
         # Validate file extension
@@ -184,10 +201,12 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
             file_ext = os.path.splitext(file.filename.lower())[1]
             if file_ext not in ALLOWED_EXTENSIONS:
                 logger.warning(f"Rejected file with invalid extension: {file_ext}")
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid file extension. Allowed extensions: "
-                    f"{', '.join(sorted(ALLOWED_EXTENSIONS))}",
+                raise create_error_response(
+                    ErrorCode.UNSUPPORTED_FORMAT,
+                    details={
+                        "extension": file_ext,
+                        "allowed": sorted(ALLOWED_EXTENSIONS),
+                    },
                 )
 
         # Validate file size - use SpooledTemporaryFile to avoid RAM issues with large files
@@ -206,10 +225,12 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
                 if total_size > MAX_FILE_SIZE_BYTES:
                     tmp_file.close()
                     logger.warning(f"Rejected file exceeding size limit: {total_size} bytes")
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"File too large. Maximum size: "
-                        f"{MAX_FILE_SIZE_BYTES / (1024 * 1024):.0f} MB",
+                    raise create_error_response(
+                        ErrorCode.FILE_TOO_LARGE,
+                        details={
+                            "size_bytes": total_size,
+                            "max_bytes": MAX_FILE_SIZE_BYTES,
+                        },
                     )
 
                 tmp_file.write(chunk)
@@ -217,7 +238,7 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
             if total_size == 0:
                 tmp_file.close()
                 logger.warning("Rejected empty file")
-                raise HTTPException(status_code=400, detail="File is empty")
+                raise create_error_response(ErrorCode.EMPTY_FILE)
 
             tmp_file.seek(0)
             buffer = io.BytesIO(tmp_file.read())
@@ -227,11 +248,42 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
             raise
         except Exception as e:
             tmp_file.close()
-            raise HTTPException(status_code=500, detail=f"Failed to read file: {e}") from e
+            raise create_error_response(
+                ErrorCode.INTERNAL_ERROR,
+                message=f"Failed to read file: {e}",
+                log_level="error",
+            ) from e
 
         # Wrap audio processing in a timeout to prevent hangs
         async def process_audio():
             loop = asyncio.get_running_loop()
+
+            # Check full file duration before processing
+            def check_duration():
+                buffer.seek(0)
+                try:
+                    with sf.SoundFile(buffer) as f:
+                        full_duration = len(f) / f.samplerate
+                    buffer.seek(0)
+                    return full_duration
+                except Exception:
+                    buffer.seek(0)
+                    return None
+
+            full_duration = await loop.run_in_executor(None, check_duration)
+            if full_duration is not None and full_duration > MAX_UPLOAD_DURATION_SECONDS:
+                logger.warning(
+                    f"Rejected file exceeding duration limit: {file.filename}, "
+                    f"duration={full_duration:.1f}s"
+                )
+                raise create_error_response(
+                    ErrorCode.DURATION_TOO_LONG,
+                    details={
+                        "duration_seconds": round(full_duration, 1),
+                        "max_seconds": MAX_UPLOAD_DURATION_SECONDS,
+                    },
+                )
+
             print("[ANALYZE-SIMPLE] Starting audio decode (fast path)...", flush=True)
 
             # Use fast_load_audio which uses soundfile directly for WAV files
@@ -264,7 +316,7 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
                 None, lambda: detect_scale_from_audio(audio_array, sample_rate)
             )
 
-            # Genre classification
+            # Genre classification with improved error handling
             genre_info = None
             try:
                 from hookgen_core import classify_genre
@@ -282,8 +334,17 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
                     preset=genre_result.preset,
                     debug=genre_result.debug if os.getenv("DEBUG_GENRE") == "true" else None,
                 )
+            except (ValueError, TypeError) as e:
+                # Parameter/type errors - log warning, continue without genre
+                logger.warning(f"Genre classification parameter error: {e}")
+                genre_info = None
+            except np.linalg.LinAlgError as e:
+                # Numpy linear algebra errors - log warning, continue
+                logger.warning(f"Genre classification numpy error: {e}")
+                genre_info = None
             except Exception as e:
-                logger.warning(f"Genre classification failed: {e}")
+                # Unexpected errors - log error level for investigation
+                logger.error(f"Genre classification failed unexpectedly: {e}", exc_info=True)
                 genre_info = None
 
             return AnalysisResponse(
@@ -303,10 +364,9 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
             logger.error(
                 f"Audio processing timed out after {AUDIO_PROCESSING_TIMEOUT_SECONDS} seconds"
             )
-            raise HTTPException(
-                status_code=408,
-                detail="Audio processing timed out. Maximum processing time: "
-                f"{AUDIO_PROCESSING_TIMEOUT_SECONDS} seconds",
+            raise create_error_response(
+                ErrorCode.PROCESSING_TIMEOUT,
+                details={"timeout_seconds": AUDIO_PROCESSING_TIMEOUT_SECONDS},
             ) from None
         except Exception as e:
             # Handle librosa and audio processing errors
@@ -315,14 +375,15 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
 
             # Check for common librosa errors
             if "NoBackendError" in error_msg or "could not be loaded" in error_msg.lower():
-                raise HTTPException(
-                    status_code=422,
-                    detail="Unsupported audio format or corrupted file. "
+                raise create_error_response(
+                    ErrorCode.ANALYSIS_FAILED,
+                    message="Unsupported audio format or corrupted file. "
                     "Please ensure the file is a valid audio file.",
                 ) from None
 
-            raise HTTPException(
-                status_code=422, detail=f"Failed to process audio file: {error_msg}"
+            raise create_error_response(
+                ErrorCode.ANALYSIS_FAILED,
+                message=f"Failed to process audio file: {error_msg}",
             ) from e
 
     except HTTPException:
@@ -331,7 +392,7 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
     except Exception:
         # Catch any other unexpected errors
         logger.exception("Unhandled error processing audio request")
-        raise HTTPException(status_code=500, detail="Internal server error") from None
+        raise create_error_response(ErrorCode.INTERNAL_ERROR, log_level="error") from None
     finally:
         # Ensure resources are cleaned up
         if buffer is not None:
@@ -348,7 +409,8 @@ async def analyze_audio(file: UploadFile = File(...)):  # noqa: B008
 
 
 @router.post("/analyze/stream")
-async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
+@limiter.limit(ANALYZE_RATE_LIMIT)
+async def analyze_audio_stream(request: Request, file: UploadFile = File(...)):  # noqa: B008
     """
     Streaming analyze endpoint that sends progress updates via Server-Sent Events.
 
@@ -377,10 +439,13 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
             if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
                 yield sse_event(
                     "error",
-                    {
-                        "detail": "Invalid content type. Allowed types: "
-                        f"{', '.join(sorted(ALLOWED_CONTENT_TYPES))}"
-                    },
+                    create_sse_error(
+                        ErrorCode.UNSUPPORTED_FORMAT,
+                        details={
+                            "content_type": file.content_type,
+                            "allowed": sorted(ALLOWED_CONTENT_TYPES),
+                        },
+                    ),
                 )
                 return
 
@@ -390,10 +455,13 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 if file_ext not in ALLOWED_EXTENSIONS:
                     yield sse_event(
                         "error",
-                        {
-                            "detail": "Invalid file extension. Allowed extensions: "
-                            f"{', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                        },
+                        create_sse_error(
+                            ErrorCode.UNSUPPORTED_FORMAT,
+                            details={
+                                "extension": file_ext,
+                                "allowed": sorted(ALLOWED_EXTENSIONS),
+                            },
+                        ),
                     )
                     return
 
@@ -418,10 +486,13 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                         tmp_file.close()
                         yield sse_event(
                             "error",
-                            {
-                                "detail": f"File too large. Maximum size: "
-                                f"{MAX_FILE_SIZE_BYTES / (1024 * 1024):.0f} MB"
-                            },
+                            create_sse_error(
+                                ErrorCode.FILE_TOO_LARGE,
+                                details={
+                                    "size_bytes": total_size,
+                                    "max_bytes": MAX_FILE_SIZE_BYTES,
+                                },
+                            ),
                         )
                         return
 
@@ -429,7 +500,7 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
 
                 if total_size == 0:
                     tmp_file.close()
-                    yield sse_event("error", {"detail": "File is empty"})
+                    yield sse_event("error", create_sse_error(ErrorCode.EMPTY_FILE))
                     return
 
                 tmp_file.seek(0)
@@ -438,7 +509,45 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
             except Exception as e:
                 tmp_file.close()
                 logger.error(f"Failed to read uploaded file: {e}")
-                yield sse_event("error", {"detail": f"Failed to read file: {e}"})
+                yield sse_event(
+                    "error",
+                    create_sse_error(
+                        ErrorCode.INTERNAL_ERROR,
+                        message=f"Failed to read file: {e}",
+                    ),
+                )
+                return
+
+            # Check full file duration before processing
+            loop = asyncio.get_running_loop()
+
+            def check_duration():
+                buffer.seek(0)
+                try:
+                    with sf.SoundFile(buffer) as f:
+                        full_duration = len(f) / f.samplerate
+                    buffer.seek(0)
+                    return full_duration
+                except Exception:
+                    buffer.seek(0)
+                    return None
+
+            full_duration = await loop.run_in_executor(None, check_duration)
+            if full_duration is not None and full_duration > MAX_UPLOAD_DURATION_SECONDS:
+                logger.warning(
+                    f"Rejected file exceeding duration limit: {file.filename}, "
+                    f"duration={full_duration:.1f}s"
+                )
+                yield sse_event(
+                    "error",
+                    create_sse_error(
+                        ErrorCode.DURATION_TOO_LONG,
+                        details={
+                            "duration_seconds": round(full_duration, 1),
+                            "max_seconds": MAX_UPLOAD_DURATION_SECONDS,
+                        },
+                    ),
+                )
                 return
 
             # Stage 2: Loading audio (10-30%)
@@ -447,7 +556,6 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
             )
 
             logger.info(f"Starting audio decode: {total_size} bytes, filename={file.filename}")
-            loop = asyncio.get_running_loop()
 
             try:
                 # Use fast_load_audio which uses soundfile directly (much faster)
@@ -467,10 +575,12 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 )
                 yield sse_event(
                     "error",
-                    {
-                        "detail": "Audio decoding timed out after "
-                        f"{AUDIO_DECODE_TIMEOUT_SECONDS}s. Try a shorter or smaller file."
-                    },
+                    create_sse_error(
+                        ErrorCode.PROCESSING_TIMEOUT,
+                        message=f"Audio decoding timed out after {AUDIO_DECODE_TIMEOUT_SECONDS}s. "
+                        "Try a shorter or smaller file.",
+                        details={"timeout_seconds": AUDIO_DECODE_TIMEOUT_SECONDS},
+                    ),
                 )
                 return
             except Exception as e:
@@ -482,13 +592,20 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 if "NoBackendError" in error_msg or "could not be loaded" in error_msg.lower():
                     yield sse_event(
                         "error",
-                        {
-                            "detail": "Unsupported audio format or corrupted file. "
-                            "Make sure ffmpeg is installed for MP3/M4A support."
-                        },
+                        create_sse_error(
+                            ErrorCode.ANALYSIS_FAILED,
+                            message="Unsupported audio format or corrupted file. "
+                            "Make sure ffmpeg is installed for MP3/M4A support.",
+                        ),
                     )
                 else:
-                    yield sse_event("error", {"detail": f"Failed to decode audio: {error_msg}"})
+                    yield sse_event(
+                        "error",
+                        create_sse_error(
+                            ErrorCode.ANALYSIS_FAILED,
+                            message=f"Failed to decode audio: {error_msg}",
+                        ),
+                    )
                 return
 
             # Stage 3: Detecting tempo (30-55%)
@@ -509,7 +626,11 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 logger.error(f"Tempo detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
                 yield sse_event(
                     "error",
-                    {"detail": f"Tempo detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s"},
+                    create_sse_error(
+                        ErrorCode.PROCESSING_TIMEOUT,
+                        message=f"Tempo detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s",
+                        details={"timeout_seconds": ANALYSIS_TIMEOUT_SECONDS, "stage": "tempo"},
+                    ),
                 )
                 return
 
@@ -543,7 +664,11 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 logger.error(f"Groove analysis timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
                 yield sse_event(
                     "error",
-                    {"detail": f"Groove analysis timed out after {ANALYSIS_TIMEOUT_SECONDS}s"},
+                    create_sse_error(
+                        ErrorCode.PROCESSING_TIMEOUT,
+                        message=f"Groove analysis timed out after {ANALYSIS_TIMEOUT_SECONDS}s",
+                        details={"timeout_seconds": ANALYSIS_TIMEOUT_SECONDS, "stage": "groove"},
+                    ),
                 )
                 return
 
@@ -576,7 +701,11 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                 logger.error(f"Scale detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s")
                 yield sse_event(
                     "error",
-                    {"detail": f"Scale detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s"},
+                    create_sse_error(
+                        ErrorCode.PROCESSING_TIMEOUT,
+                        message=f"Scale detection timed out after {ANALYSIS_TIMEOUT_SECONDS}s",
+                        details={"timeout_seconds": ANALYSIS_TIMEOUT_SECONDS, "stage": "scale"},
+                    ),
                 )
                 return
 
@@ -620,8 +749,14 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
                     "preset": genre_result.preset,
                 }
                 logger.info(f"Genre classified: {genre_result.tags}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Genre classification parameter error: {e}")
+                genre_info = None
+            except np.linalg.LinAlgError as e:
+                logger.warning(f"Genre classification numpy error: {e}")
+                genre_info = None
             except Exception as e:
-                logger.warning(f"Genre classification failed: {e}")
+                logger.error(f"Genre classification failed unexpectedly: {e}", exc_info=True)
                 genre_info = None
 
             # Stage 7: Complete (100%)
@@ -643,7 +778,7 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
 
         except Exception:
             logger.exception("Unhandled error in streaming analyze")
-            yield sse_event("error", {"detail": "Internal server error"})
+            yield sse_event("error", create_sse_error(ErrorCode.INTERNAL_ERROR))
         finally:
             if buffer is not None:
                 try:
@@ -666,8 +801,17 @@ async def analyze_audio_stream(file: UploadFile = File(...)):  # noqa: B008
     )
 
 
-@router.post("/generate", response_model=HookResponse)
-def generate_hooks(req: GenerateRequest):
+@router.post(
+    "/generate",
+    response_model=HookResponse,
+    responses={
+        422: {"model": ErrorResponse, "description": "Invalid request data"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
+        500: {"model": ErrorResponse, "description": "Generation failed"},
+    },
+)
+@limiter.limit(GENERATE_RATE_LIMIT)
+def generate_hooks(request: Request, req: GenerateRequest):
     reg_map = {"low": (48, 69), "mid": (55, 76), "high": (62, 84)}
     register_range = reg_map.get(req.pitch_register, (55, 76))
 
@@ -743,11 +887,14 @@ def save_session_endpoint(data: SessionData):
     return {"id": session_id}
 
 
-@router.get("/session/{session_id}")
+@router.get(
+    "/session/{session_id}",
+    responses={404: {"model": ErrorResponse, "description": "Session not found"}},
+)
 def get_session_endpoint(session_id: str):
     data = get_session(session_id)
     if not data:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise create_error_response(ErrorCode.NOT_FOUND, message="Session not found")
     return data
 
 
@@ -815,32 +962,46 @@ def list_examples() -> List[ExampleFile]:
     return examples
 
 
-@router.get("/examples/{filename}")
+@router.get(
+    "/examples/{filename}",
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid filename"},
+        404: {"model": ErrorResponse, "description": "File not found"},
+    },
+)
 async def get_example_file(filename: str):
     """Serve an example audio file."""
     # Security: only allow .wav files and prevent path traversal
     if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+        raise create_error_response(ErrorCode.INVALID_FILENAME)
 
     examples_dir = get_examples_dir()
     filepath = examples_dir / filename
     if not filepath.exists() or not filepath.is_file():
-        raise HTTPException(status_code=404, detail="Example file not found")
+        raise create_error_response(ErrorCode.NOT_FOUND, message="Example file not found")
 
     return FileResponse(path=filepath, media_type="audio/wav", filename=filename)
 
 
-@router.post("/examples/{filename}/analyze", response_model=AnalysisResponse)
+@router.post(
+    "/examples/{filename}/analyze",
+    response_model=AnalysisResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid filename"},
+        404: {"model": ErrorResponse, "description": "File not found"},
+        500: {"model": ErrorResponse, "description": "Analysis failed"},
+    },
+)
 async def analyze_example(filename: str):
     """Analyze an example file directly (saves client from downloading first)."""
     # Security: only allow .wav files and prevent path traversal
     if not filename.endswith(".wav") or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+        raise create_error_response(ErrorCode.INVALID_FILENAME)
 
     examples_dir = get_examples_dir()
     filepath = examples_dir / filename
     if not filepath.exists() or not filepath.is_file():
-        raise HTTPException(status_code=404, detail="Example file not found")
+        raise create_error_response(ErrorCode.NOT_FOUND, message="Example file not found")
 
     try:
         loop = asyncio.get_running_loop()
@@ -885,4 +1046,8 @@ async def analyze_example(filename: str):
         )
     except Exception as e:
         logger.error(f"Error analyzing example file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to analyze example: {str(e)}") from e
+        raise create_error_response(
+            ErrorCode.ANALYSIS_FAILED,
+            message=f"Failed to analyze example: {str(e)}",
+            log_level="error",
+        ) from e

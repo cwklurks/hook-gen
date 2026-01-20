@@ -8,6 +8,9 @@ import PianoRoll from "@/components/PianoRoll";
 import SynthPlayer, { SynthPlayerControls } from "@/components/SynthPlayer";
 import SoundWaveBackground from "@/components/SoundWaveBackground";
 import AnalysisProgress from "@/components/AnalysisProgress";
+import ErrorDisplay, { RetryIndicator } from "@/components/ErrorDisplay";
+import { ApiErrorResponse, parseErrorResponse } from "@/utils/errors";
+import { fetchWithRetry, RetryState } from "@/utils/fetchWithRetry";
 
 // API base URL: use env var for local dev, empty string for production (same origin)
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -54,7 +57,9 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<ApiErrorResponse | string | null>(null);
+  const [retryState, setRetryState] = useState<RetryState | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   // Progress tracking for analysis
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgressState>({
@@ -83,16 +88,20 @@ export default function Home() {
   const [isPlayingTogether, setIsPlayingTogether] = useState(false);
   const [waveformReady, setWaveformReady] = useState(false);
 
+  // Abort controller for cancelling requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
-  const MAX_FILE_SIZE_MB = 100;
+  const MAX_FILE_SIZE_MB = 20;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-  // Cleanup object URLs to prevent memory leaks
+  // Cleanup object URLs and abort controllers to prevent memory leaks
   useEffect(() => {
     return () => {
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
       }
+      abortControllerRef.current?.abort();
     };
   }, [audioUrl]);
 
@@ -152,6 +161,8 @@ export default function Home() {
     setSelectedExample(example.filename);
     setIsAnalyzing(true);
     setGeneratedHooks([]);
+    setRetryState(null);
+    setRetryCountdown(null);
 
     // Initialize progress
     setAnalysisProgress({ stage: "loading", progress: 10, message: "Fetching example audio..." });
@@ -197,7 +208,11 @@ export default function Home() {
       const data = await analysisRes.json();
 
       if (!analysisRes.ok) {
-        setUploadError(data.detail || "Failed to analyze example file.");
+        const parsedError = parseErrorResponse(data);
+        setUploadError(parsedError || data.detail || "Failed to analyze example file.");
+        if (parsedError?.retry_after) {
+          setRetryCountdown(parsedError.retry_after);
+        }
         setAudioUrl(null);
         return;
       }
@@ -210,7 +225,11 @@ export default function Home() {
       setAnalysis(data);
     } catch (err) {
       console.error("Example analysis failed", err);
-      setUploadError("Failed to load example. Please try again.");
+      setUploadError({
+        error_code: "INTERNAL_ERROR",
+        message: "Failed to load example. Please try again.",
+        retryable: true,
+      });
       setAudioUrl(null);
     } finally {
       setIsAnalyzing(false);
@@ -221,24 +240,38 @@ export default function Home() {
     if (e.target.files && e.target.files[0]) {
       const uploadedFile = e.target.files[0];
 
+      // Abort any in-progress request
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
+
       // Clear previous error and example selection
       setUploadError(null);
       setSelectedExample(null);
       setGeneratedHooks([]);
       setWaveformReady(false);
       setIsPlayingTogether(false);
+      setRetryState(null);
+      setRetryCountdown(null);
 
       // Validate file extension
       const fileName = uploadedFile.name.toLowerCase();
       const fileExt = fileName.substring(fileName.lastIndexOf("."));
       if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
-        setUploadError("Unsupported file type. Please upload a WAV, MP3, or MP4 file.");
+        setUploadError({
+          error_code: "UNSUPPORTED_FORMAT",
+          message: "Unsupported file type.",
+          retryable: false,
+        });
         return;
       }
 
       // Validate file size
       if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
-        setUploadError(`File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
+        setUploadError({
+          error_code: "FILE_TOO_LARGE",
+          message: "File exceeds 20MB limit.",
+          retryable: false,
+        });
         return;
       }
 
@@ -256,18 +289,33 @@ export default function Home() {
       formData.append("file", uploadedFile);
 
       try {
-        // Use simple POST endpoint (more reliable than SSE on some hosting)
-        const response = await fetch(`${API_BASE}/analyze`, {
+        const response = await fetchWithRetry(`${API_BASE}/analyze`, {
           method: "POST",
           body: formData,
+          abortSignal: abortControllerRef.current.signal,
+          onRetryStateChange: setRetryState,
+          retryConfig: {
+            maxRetries: 2, // Fewer retries for large uploads
+            retryableStatuses: [429, 502, 503, 504],
+          },
         });
+
+        setRetryState(null);
 
         if (!response.ok) {
           const errorData = await response
             .json()
             .catch(() => ({ detail: "Failed to analyze audio file." }));
-          setUploadError(errorData.detail || "Failed to analyze audio file.");
+          const parsedError = parseErrorResponse(errorData);
+
+          setUploadError(parsedError || errorData.detail || "Failed to analyze audio file.");
           setAudioUrl(null);
+
+          // Set retry countdown for rate limiting
+          if (parsedError?.retry_after) {
+            setRetryCountdown(parsedError.retry_after);
+          }
+
           setIsAnalyzing(false);
           return;
         }
@@ -276,8 +324,18 @@ export default function Home() {
         setAnalysis(data);
         setIsAnalyzing(false);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Request was cancelled, don't show error
+          setIsAnalyzing(false);
+          return;
+        }
+
         console.error("Analysis failed", err);
-        setUploadError("Failed to connect to the server. Please try again.");
+        setUploadError({
+          error_code: "INTERNAL_ERROR",
+          message: "Failed to connect to the server. Please try again.",
+          retryable: true,
+        });
         setIsAnalyzing(false);
       }
     }
@@ -285,11 +343,18 @@ export default function Home() {
 
   const handleGenerate = async () => {
     if (!analysis) return;
+
+    // Abort any in-progress request
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
     setIsGenerating(true);
+    setUploadError(null);
+    setRetryState(null);
+    setRetryCountdown(null);
 
     try {
-      // Use API_BASE for local dev, empty for production (same origin)
-      const res = await fetch(`${API_BASE}/generate`, {
+      const res = await fetchWithRetry(`${API_BASE}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -301,19 +366,33 @@ export default function Home() {
           histogram: analysis.histogram,
           seed: Math.floor(Math.random() * 10000),
         }),
+        abortSignal: abortControllerRef.current.signal,
+        onRetryStateChange: setRetryState,
       });
+
+      setRetryState(null);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: "Generation failed" }));
+        const parsedError = parseErrorResponse(errorData);
+
         console.error("Generation error:", errorData);
-        setUploadError(errorData.detail || "Failed to generate hooks. Please try again.");
+        setUploadError(parsedError || errorData.detail || "Failed to generate hooks. Please try again.");
+
+        if (parsedError?.retry_after) {
+          setRetryCountdown(parsedError.retry_after);
+        }
         return;
       }
 
       const data = await res.json();
       if (!data.hooks || !Array.isArray(data.hooks)) {
         console.error("Invalid response format:", data);
-        setUploadError("Received invalid data from server. Please try again.");
+        setUploadError({
+          error_code: "INTERNAL_ERROR",
+          message: "Received invalid data from server. Please try again.",
+          retryable: true,
+        });
         return;
       }
 
@@ -321,8 +400,16 @@ export default function Home() {
       setSelectedHookIndex(0);
       setUploadError(null);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+
       console.error("Generation failed", err);
-      setUploadError("Failed to connect to the server. Please try again.");
+      setUploadError({
+        error_code: "INTERNAL_ERROR",
+        message: "Failed to connect to the server. Please try again.",
+        retryable: true,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -401,10 +488,44 @@ export default function Home() {
                   </div>
                   <div className="text-center">
                     <p className="font-medium text-neutral-200">Drop Audio File</p>
-                    <p className="mt-1 text-sm text-neutral-500">WAV, MP3, or MP4 • Max 100MB</p>
+                    <p className="mt-1 text-sm text-neutral-500">WAV, MP3, or MP4 • Max 20MB</p>
                   </div>
+                  {/* Error display */}
                   {uploadError && (
-                    <p className="mt-2 px-4 text-center text-sm text-red-400">{uploadError}</p>
+                    <div className="mt-2 w-full max-w-md px-2">
+                      <ErrorDisplay
+                        error={uploadError}
+                        onDismiss={() => {
+                          setUploadError(null);
+                          setRetryCountdown(null);
+                        }}
+                        onRetry={
+                          typeof uploadError !== "string" && uploadError.retryable
+                            ? () => {
+                                const input = document.querySelector(
+                                  'input[type="file"]'
+                                ) as HTMLInputElement;
+                                if (input?.files?.[0]) {
+                                  handleFileUpload({
+                                    target: input,
+                                  } as React.ChangeEvent<HTMLInputElement>);
+                                }
+                              }
+                            : undefined
+                        }
+                        retryCountdown={retryCountdown}
+                      />
+                    </div>
+                  )}
+                  {/* Retry indicator during retries */}
+                  {retryState?.isRetrying && (
+                    <div className="mt-2 px-2">
+                      <RetryIndicator
+                        attempt={retryState.attempt}
+                        maxAttempts={3}
+                        retryAfterMs={retryState.retryAfterMs}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

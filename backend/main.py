@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 from api import endpoints
+from api.rate_limit import limiter, rate_limit_exceeded_handler
 from app.database import init_db
 from fastapi import FastAPI, Request, Response
 from hookgen_core import (
@@ -11,6 +12,7 @@ from hookgen_core import (
     groove_histogram,
     ticks_from_beats,
 )
+from slowapi.errors import RateLimitExceeded
 
 # Configure logging to flush immediately to stdout
 logging.basicConfig(
@@ -25,6 +27,10 @@ for handler in logging.root.handlers:
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Hook-Gen API", version="2.0.0")
+
+# Rate limiting setup
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 
 # CORS: Handle preflight OPTIONS requests manually for maximum compatibility

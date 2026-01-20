@@ -24,6 +24,9 @@ node_modules/
 .vscode/
 *.swp
 
+# Claude Code
+.claude/
+
 # Build artifacts
 dist/
 build/

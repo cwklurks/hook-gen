@@ -77,7 +77,11 @@ def estimate_bpm_and_beats(
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)
         
         # Get multiple tempo candidates for better accuracy
-        tempo_candidates = np.atleast_1d(librosa.beat.tempo(onset_envelope=onset_env, sr=sr, aggregate=None))
+        tempo_candidates = np.atleast_1d(
+            librosa.beat.tempo(
+                onset_envelope=onset_env, sr=sr, aggregate=None,
+            )
+        )
         tempo_guess = 120.0
         
         if tempo_candidates.size:
@@ -115,7 +119,10 @@ def estimate_bpm_and_beats(
         # Fall back to plain tracker if we got too few beats
         if beat_times.size < 2:
             tempo_track, beat_frames = librosa.beat.beat_track(y=y, sr=sr, trim=True)
-            tempo_track = float(np.atleast_1d(tempo_track)[0]) if np.size(tempo_track) else tempo_guess
+            tempo_track = (
+                float(np.atleast_1d(tempo_track)[0])
+                if np.size(tempo_track) else tempo_guess
+            )
             beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
         return float(tempo_track), beat_times

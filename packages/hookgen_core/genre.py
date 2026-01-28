@@ -6,10 +6,10 @@ using template matching, BPM priors, and feature analysis. Returns confidence,
 explanations, and preset parameters for the generator.
 """
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Tuple, Any, Optional
-import numpy as np
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 
 # ============================================================================
 # DATA STRUCTURES
@@ -421,7 +421,7 @@ def classify_genre(
     prob_gap = top_prob - second_prob
 
     debug_info["probabilities"] = dict(  # type: ignore[assignment]
-        {tag: float(prob) for tag, prob in zip(sorted_tags, sorted_probs)}
+        {tag: float(prob) for tag, prob in zip(sorted_tags, sorted_probs, strict=False)}
     )
     debug_info["top_prob"] = top_prob  # type: ignore[assignment]
     debug_info["second_prob"] = second_prob  # type: ignore[assignment]
@@ -440,7 +440,7 @@ def classify_genre(
         # Return top K tags above threshold
         threshold = 0.15
         result_tags = [
-            tag for tag, prob in zip(sorted_tags, sorted_probs) if prob > threshold
+            tag for tag, prob in zip(sorted_tags, sorted_probs, strict=False) if prob > threshold
         ][:top_k]
         confidence = float(top_prob)
 
@@ -491,7 +491,9 @@ def _generate_explanation(
 
     if bpm_interp == "straight":
         explanation.append(
-            f"Tempo {bpm_val:.0f} BPM matches {tag.replace('_', ' ')} prior ({config['bpm_prior'][0]:.0f} BPM)"
+            f"Tempo {bpm_val:.0f} BPM matches "
+            f"{tag.replace('_', ' ')} prior "
+            f"({config['bpm_prior'][0]:.0f} BPM)"
         )
     elif bpm_interp == "half-time":
         explanation.append(
@@ -514,7 +516,7 @@ def _generate_explanation(
     if sync_ratio > 0.55:
         explanation.append(f"High syncopation (sync ratio {sync_ratio:.2f})")
     elif sync_ratio < 0.35:
-        explanation.append(f"Low syncopation, groove locks to strong beats")
+        explanation.append("Low syncopation, groove locks to strong beats")
 
     # 4. Template match quality
     template_sim = breakdown["template_similarity"]

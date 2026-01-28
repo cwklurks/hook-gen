@@ -337,7 +337,8 @@ def generate_structured_hook(
             # If leading tone is too far, try dominant (index 4)
             dominant = _fit_to_register(to_midi(4), register)
             
-            # Choose leading tone if it's close to the penultimate note's current pitch, else dominant
+            # Choose leading tone if it's close to the penultimate
+            # note's current pitch, else dominant
             if abs(penultimate["pitch"] - leading_tone) < abs(penultimate["pitch"] - dominant):
                 penultimate["pitch"] = leading_tone
             else:

@@ -12,6 +12,11 @@ from .export import (
     notes_to_wav_bytes,
     write_multi_track,
 )
+from .genre import (
+    GENRE_TEMPLATES,
+    GenreResult,
+    classify_genre,
+)
 from .motif import (
     DEFAULT_SCALE,
     NOTE_TO_SEMITONE,
@@ -35,11 +40,6 @@ from .rhythm import (
 )
 from .ui_helpers import (
     build_zip_name,
-)
-from .genre import (
-    classify_genre,
-    GenreResult,
-    GENRE_TEMPLATES,
 )
 
 __all__ = [

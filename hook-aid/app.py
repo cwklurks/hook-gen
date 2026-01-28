@@ -90,8 +90,16 @@ density = st.slider("Notes per bar", 4, 12, 7, help=notes_help)
 sync_help = "0 keeps hits on the grid; 1 pushes accents to the off-beats for a funkier feel."
 sync = st.slider("Groove push", 0.0, 1.0, 0.5, 0.1, help=sync_help)
 
-register_help = "Low hugs the lower octave, mid sits around middle C, high jumps up an octave."
-register = st.select_slider("Pitch range", options=["low", "mid", "high"], value="mid", help=register_help)
+register_help = (
+    "Low hugs the lower octave, mid sits around middle C,"
+    " high jumps up an octave."
+)
+register = st.select_slider(
+    "Pitch range",
+    options=["low", "mid", "high"],
+    value="mid",
+    help=register_help,
+)
 
 if file:
     uploaded_name = file.name

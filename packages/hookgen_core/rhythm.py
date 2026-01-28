@@ -13,7 +13,7 @@ def load_mono(
     y, _ = librosa.effects.trim(y, top_db=30)
     rms = np.sqrt(np.mean(y**2)) + 1e-8
     y = y * (0.1 / rms)
-    return y, sr_out
+    return y, int(sr_out)
 
 
 def estimate_bpm_and_beats(
@@ -48,28 +48,30 @@ def estimate_bpm_and_beats(
         # Fast tempo estimation using autocorrelation (much faster than beat_track)
         # This avoids the expensive dynamic programming in beat_track
         try:
-            tempo = librosa.feature.rhythm.tempo(onset_envelope=onset_env, sr=sr, hop_length=512)
-            tempo = float(np.atleast_1d(tempo)[0])
+            tempo_raw = librosa.feature.rhythm.tempo(
+                onset_envelope=onset_env, sr=sr, hop_length=512
+            )
+            tempo_val = float(np.atleast_1d(tempo_raw)[0])
         except AttributeError:
             # Older librosa versions
-            tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr, hop_length=512)
-            tempo = float(np.atleast_1d(tempo)[0])
-        
+            tempo_raw = librosa.beat.tempo(onset_envelope=onset_env, sr=sr, hop_length=512)
+            tempo_val = float(np.atleast_1d(tempo_raw)[0])
+
         # Constrain tempo to reasonable range
-        if tempo > 160:
-            tempo /= 2.0
-        elif tempo < 60:
-            tempo *= 2.0
-        
-        tempo = max(60.0, min(180.0, tempo)) if tempo > 0 else 120.0
-        
+        if tempo_val > 160:
+            tempo_val /= 2.0
+        elif tempo_val < 60:
+            tempo_val *= 2.0
+
+        tempo_val = max(60.0, min(180.0, tempo_val)) if tempo_val > 0 else 120.0
+
         # Generate synthetic beat times based on tempo (skip expensive beat tracking)
         duration = len(y) / sr
-        beat_interval = 60.0 / tempo
-        beat_times = np.arange(0, duration, beat_interval)
+        beat_interval = 60.0 / tempo_val
+        beat_times: NDArray[np.floating[Any]] = np.arange(0, duration, beat_interval)
         
-        return float(tempo), beat_times
-    
+        return float(tempo_val), beat_times
+
     else:
         # Accurate mode: Full beat tracking with shuffle/double-time detection (hook-aid approach)
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)

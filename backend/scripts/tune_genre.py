@@ -47,7 +47,8 @@ def main():
     # Load and analyze
     print(f"Loading {args.audio_file}...")
     try:
-        y, sr = librosa.load(args.audio_file, sr=22050, mono=True, duration=8)
+        y, sr_raw = librosa.load(args.audio_file, sr=22050, mono=True, duration=8)
+        sr = int(sr_raw)
     except Exception as e:
         print(f"Error loading file: {e}")
         sys.exit(1)

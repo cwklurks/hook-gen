@@ -61,6 +61,14 @@ module = [
     "streamlit",
     "streamlit.*",
     "numpy.*",
+    "pydantic",
+    "pydantic.*",
+    "slowapi",
+    "slowapi.*",
+    "starlette",
+    "starlette.*",
+    "pytest",
+    "pytest.*",
 ]
 ignore_missing_imports = true
 

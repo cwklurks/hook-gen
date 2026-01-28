@@ -44,7 +44,8 @@ class TestGoldenGenres:
             pytest.skip(f"Example file not found: {filepath}")
 
         # Load and analyze
-        y, sr = librosa.load(filepath, sr=22050, mono=True, duration=8)
+        y, sr_raw = librosa.load(filepath, sr=22050, mono=True, duration=8)
+        sr = int(sr_raw)
         bpm, beat_times = estimate_bpm_and_beats(y, sr)
         ticks = ticks_from_beats(beat_times, subdiv=4)
         histogram = groove_histogram(y, sr, ticks)
@@ -77,7 +78,8 @@ class TestGoldenGenres:
 
         for wav_file in wav_files:
             try:
-                y, sr = librosa.load(wav_file, sr=22050, mono=True, duration=8)
+                y, sr_raw = librosa.load(wav_file, sr=22050, mono=True, duration=8)
+                sr = int(sr_raw)
                 bpm, beat_times = estimate_bpm_and_beats(y, sr)
                 ticks = ticks_from_beats(beat_times, subdiv=4)
                 histogram = groove_histogram(y, sr, ticks)

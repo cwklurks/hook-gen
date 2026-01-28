@@ -49,7 +49,8 @@ def _confidence_badge(scale: Optional[str], score: float) -> None:
 def _analyze_audio(file_bytes: bytes):
     """Heavy audio analysis (load, tempo, histogram, scale) cached per upload."""
     buffer = io.BytesIO(file_bytes)
-    audio_array, sample_rate = librosa.load(buffer, sr=22050, mono=True)
+    audio_array, sample_rate_raw = librosa.load(buffer, sr=22050, mono=True)
+    sample_rate: int = int(sample_rate_raw)
 
     detected_bpm, beat_times = estimate_bpm_and_beats(audio_array, sample_rate)
     ticks = ticks_from_beats(beat_times, subdiv=4)

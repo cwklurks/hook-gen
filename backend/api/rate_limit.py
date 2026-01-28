@@ -1,23 +1,22 @@
 import logging
 import os
 
+from api.errors import ErrorCode, ErrorResponse
 from fastapi import Request, Response
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
-from api.errors import ErrorCode, ErrorResponse
-
 logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: Request) -> str:
     """Extract client IP from X-Forwarded-For or direct connection."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
+    forwarded_for: str | None = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
-    return get_remote_address(request)
+    return str(get_remote_address(request))
 
 
 def create_limiter() -> Limiter:
@@ -32,7 +31,8 @@ def create_limiter() -> Limiter:
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     client_ip = get_client_ip(request)
     logger.warning(
-        f"Rate limit exceeded: client_ip={client_ip}, endpoint={request.url.path}, limit={exc.detail}"
+        f"Rate limit exceeded: client_ip={client_ip}, "
+        f"endpoint={request.url.path}, limit={exc.detail}"
     )
 
     error_response = ErrorResponse(

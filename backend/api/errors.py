@@ -47,17 +47,25 @@ class ErrorConfig:
         },
         ErrorCode.UNSUPPORTED_FORMAT: {
             "status_code": 400,
-            "message": "Unsupported audio format. Supported formats: WAV, MP3, FLAC, OGG, M4A, AAC.",
+            "message": (
+                "Unsupported audio format. Supported formats: WAV, MP3, FLAC, OGG, M4A, AAC."
+            ),
             "retryable": False,
         },
         ErrorCode.FILE_TOO_LARGE: {
             "status_code": 413,
-            "message": "File exceeds 20MB limit. For best results, trim your loop to 8-16 bars before uploading.",
+            "message": (
+                "File exceeds 20MB limit. For best results, "
+                "trim your loop to 8-16 bars before uploading."
+            ),
             "retryable": False,
         },
         ErrorCode.DURATION_TOO_LONG: {
             "status_code": 422,
-            "message": "Audio duration exceeds 30 seconds. Please trim your loop to 8-16 bars for optimal analysis.",
+            "message": (
+                "Audio duration exceeds 30 seconds. "
+                "Please trim your loop to 8-16 bars for optimal analysis."
+            ),
             "retryable": False,
         },
         ErrorCode.EMPTY_FILE: {
@@ -77,7 +85,10 @@ class ErrorConfig:
         },
         ErrorCode.ANALYSIS_FAILED: {
             "status_code": 422,
-            "message": "Failed to analyze the audio file. The file may be corrupted or in an unsupported format.",
+            "message": (
+                "Failed to analyze the audio file. "
+                "The file may be corrupted or in an unsupported format."
+            ),
             "retryable": True,
         },
         ErrorCode.GENERATION_FAILED: {

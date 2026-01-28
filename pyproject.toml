@@ -69,6 +69,8 @@ module = [
     "starlette.*",
     "pytest",
     "pytest.*",
+    "yaml",
+    "yaml.*",
 ]
 ignore_missing_imports = true
 

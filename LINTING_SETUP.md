@@ -94,6 +94,141 @@ npm run format
 npm run format:check
 ```
 
+## Python Type Hint Guidelines
+
+This project uses **mypy** for static type checking with a gradual adoption strategy.
+Type hints improve code readability, catch bugs early, and support IDE tooling.
+
+### Target Version
+
+- Python **3.10+** syntax is required (configured via `python_version = "3.10"` in mypy)
+- Use PEP 585 and PEP 604 syntax (see below)
+
+### Preferred Syntax
+
+Use modern built-in generic types (PEP 585) instead of `typing` equivalents:
+
+```python
+# Good - PEP 585 (Python 3.10+)
+def get_items() -> list[str]: ...
+def get_config() -> dict[str, int]: ...
+def get_pair() -> tuple[float, float]: ...
+
+# Avoid - legacy typing imports
+from typing import List, Dict, Tuple
+def get_items() -> List[str]: ...
+```
+
+Use PEP 604 union syntax with `|` instead of `Optional`:
+
+```python
+# Good - PEP 604
+def find(key: str) -> dict[str, Any] | None: ...
+def load(source: str | BinaryIO) -> bytes: ...
+
+# Avoid - legacy Optional/Union
+from typing import Optional, Union
+def find(key: str) -> Optional[dict[str, Any]]: ...
+def load(source: Union[str, BinaryIO]) -> bytes: ...
+```
+
+### When to Add Type Hints
+
+- **All public functions** must have parameter and return type annotations
+- **Module-level constants** should be annotated when the type isn't obvious
+- **Private functions** (`_prefix`) should have annotations for clarity
+- **Tests and scripts** have relaxed requirements (`disallow_untyped_defs = false`)
+
+### Common Patterns in This Codebase
+
+**NumPy arrays** - use `numpy.typing.NDArray`:
+
+```python
+from typing import Any
+import numpy as np
+from numpy.typing import NDArray
+
+def process(y: NDArray[np.floating[Any]], sr: int) -> NDArray[np.floating[Any]]:
+    ...
+```
+
+**Function return tuples**:
+
+```python
+def analyze(audio: bytes) -> tuple[float, NDArray[np.floating[Any]]]:
+    ...
+```
+
+**Type aliases** for complex or repeated types:
+
+```python
+from typing import Tuple
+
+Note = Tuple[int, int, int]  # (onset, duration, pitch)
+
+def export_notes(notes: Iterable[Note]) -> bytes:
+    ...
+```
+
+**Keyword-only arguments** with `*` separator:
+
+```python
+def render(
+    notes: Iterable[Note],
+    *,
+    channel: int,
+    velocity: int = 96,
+) -> None:
+    ...
+```
+
+**Pydantic models** (used in FastAPI):
+
+```python
+from pydantic import BaseModel
+
+class ErrorResponse(BaseModel):
+    error_code: str
+    message: str
+    details: dict | None = None
+    retryable: bool = False
+```
+
+**Dataclasses** with field annotations:
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class GenreResult:
+    tags: list[str]
+    confidence: float
+    preset: dict[str, float]
+    debug: dict[str, Any] = field(default_factory=dict)
+```
+
+### Mypy Configuration Summary
+
+The project uses gradual adoption (not strict mode). Key settings in `pyproject.toml`:
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `python_version` | `"3.10"` | Enables PEP 585/604 syntax |
+| `check_untyped_defs` | `true` | Type-checks function bodies even without annotations |
+| `warn_return_any` | `true` | Warns when returning `Any` from typed functions |
+| `disallow_untyped_defs` | `false` | Allows unannotated functions (gradual adoption) |
+| `no_implicit_optional` | `false` | Allows `None` defaults without explicit `| None` |
+
+Libraries without type stubs (librosa, mido, soundfile, etc.) have
+`ignore_missing_imports = true` configured.
+
+### Running Type Checks
+
+```bash
+# Run mypy on the full codebase
+mypy backend/ hook-aid/ packages/hookgen_core/
+```
+
 ## Development Workflow
 
 ### Before Committing
@@ -141,7 +276,3 @@ Consider adding these checks to your CI pipeline:
 - Some existing code may need refactoring to pass all checks
 - Focus on fixing new code first, then gradually improve existing code
 - The user requested to ignore deep logical type errors initially and focus on configuration - this has been completed successfully
-
-
-
-

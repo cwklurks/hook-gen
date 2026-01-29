@@ -12,7 +12,3 @@ def build_zip_name(upload_name: Optional[str]) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.replace(" ", "-")
     return f"hooks - {cleaned}.zip" if cleaned else "hooks.zip"
-
-
-
-

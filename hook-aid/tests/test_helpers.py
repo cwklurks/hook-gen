@@ -1,14 +1,6 @@
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import numpy as np
 import pytest
-from motif import detect_scale_from_audio
-from ui_helpers import build_zip_name
+from hookgen_core import build_zip_name, detect_scale_from_audio
 
 
 @pytest.mark.parametrize(

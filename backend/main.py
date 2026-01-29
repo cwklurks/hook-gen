@@ -30,7 +30,7 @@ app = FastAPI(title="Hook-Gen API", version="2.0.0")
 
 # Rate limiting setup
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
 # CORS: Handle preflight OPTIONS requests manually for maximum compatibility

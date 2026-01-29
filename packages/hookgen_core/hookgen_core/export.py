@@ -24,7 +24,14 @@ def _ticks_for_duration(duration: int, ticks_per_beat: int) -> int:
     return max(1, int(round(duration * ticks_per_beat / 4.0)))
 
 
-def _append_notes(track: MidiTrack, notes: Iterable[Note], *, channel: int, ticks_per_beat: int, velocity: int = 96) -> None:
+def _append_notes(
+    track: MidiTrack,
+    notes: Iterable[Note],
+    *,
+    channel: int,
+    ticks_per_beat: int,
+    velocity: int = 96,
+) -> None:
     """
     Append notes to a MIDI track with proper event ordering.
     Uses backend's improved version with event sorting for better MIDI compliance.
@@ -36,12 +43,12 @@ def _append_notes(track: MidiTrack, notes: Iterable[Note], *, channel: int, tick
         events.append((start_tick, "note_on", pitch))
         events.append((end_tick, "note_off", pitch))
 
-    # Sort by time. If times are equal, put note_off before note_on to handle legato/overlaps cleanly
-    # (though typically note_on priority over note_off is preferred if they are DIFFERENT notes, 
-    # but for same note retriggering, off then on is vital. 
-    # For different notes, order doesn't strictly matter for MIDI spec, but off-first is safer for monophonic synths).
-    # Tuple comparison: (tick, type=="note_on", pitch). 
-    # "note_off" == "note_on" is False (0), "note_on" == "note_on" is True (1).
+    # Sort by time. If times are equal, put note_off before note_on
+    # to handle legato/overlaps cleanly (off-first is safer for
+    # monophonic synths and same-note retriggering).
+    # Tuple comparison: (tick, type=="note_on", pitch).
+    # "note_off"=="note_on" is False (0), "note_on"=="note_on" is
+    # True (1).
     # So (tick, 0) comes before (tick, 1) -> note_off comes before note_on.
     events.sort(key=lambda e: (e[0], e[1] == "note_on"))
 
@@ -49,7 +56,15 @@ def _append_notes(track: MidiTrack, notes: Iterable[Note], *, channel: int, tick
     for tick, event_type, pitch in events:
         delta = max(0, tick - current_tick)
         vel = velocity if event_type == "note_on" else 0
-        track.append(Message(event_type, note=int(pitch), velocity=vel, time=delta, channel=channel))
+        track.append(
+            Message(
+                event_type,
+                note=int(pitch),
+                velocity=vel,
+                time=delta,
+                channel=channel,
+            )
+        )
         current_tick = tick
 
 
@@ -61,7 +76,14 @@ def _tempo_messages(bpm: float) -> Tuple[MetaMessage, MetaMessage]:
     )
 
 
-def notes_to_midi_bytes(notes: Iterable[Note], *, bpm: float, program: int = 0, channel: int = 0, ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT) -> bytes:
+def notes_to_midi_bytes(
+    notes: Iterable[Note],
+    *,
+    bpm: float,
+    program: int = 0,
+    channel: int = 0,
+    ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT,
+) -> bytes:
     mid = MidiFile(type=0, ticks_per_beat=ticks_per_beat)
     track = MidiTrack()
     mid.tracks.append(track)
@@ -78,7 +100,14 @@ def notes_to_midi_bytes(notes: Iterable[Note], *, bpm: float, program: int = 0, 
     return buf.getvalue()
 
 
-def write_multi_track(midis: Iterable[Iterable[Note]], *, bpm: float, path: str, program: int = 0, ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT) -> str:
+def write_multi_track(
+    midis: Iterable[Iterable[Note]],
+    *,
+    bpm: float,
+    path: str,
+    program: int = 0,
+    ticks_per_beat: int = DEFAULT_TICKS_PER_BEAT,
+) -> str:
     mid = MidiFile(type=1, ticks_per_beat=ticks_per_beat)
 
     tempo_track = MidiTrack()
@@ -166,11 +195,13 @@ def notes_to_wav_bytes(notes: Iterable[Note], *, bpm: float, sample_rate: int = 
     return _float_audio_to_wav_bytes(audio, sample_rate=sample_rate)
 
 
-def hooks_to_wav_bytes(midis: Iterable[Iterable[Note]], *, bpm: float, sample_rate: int = 22050) -> bytes:
-    tracks = [
-        _notes_to_audio_array(notes, bpm=bpm, sample_rate=sample_rate)
-        for notes in midis
-    ]
+def hooks_to_wav_bytes(
+    midis: Iterable[Iterable[Note]],
+    *,
+    bpm: float,
+    sample_rate: int = 22050,
+) -> bytes:
+    tracks = [_notes_to_audio_array(notes, bpm=bpm, sample_rate=sample_rate) for notes in midis]
     if not tracks:
         return notes_to_wav_bytes([], bpm=bpm, sample_rate=sample_rate)
 
@@ -183,7 +214,3 @@ def hooks_to_wav_bytes(midis: Iterable[Iterable[Note]], *, bpm: float, sample_ra
         mix /= len(tracks)
 
     return _float_audio_to_wav_bytes(np.clip(mix, -1.0, 1.0), sample_rate=sample_rate)
-
-
-
-

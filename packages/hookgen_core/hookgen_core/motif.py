@@ -16,16 +16,21 @@ SCALE_ROOTS: list[str] = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", 
 # Map enharmonic spellings to semitone offsets from C.
 NOTE_TO_SEMITONE: dict[str, int] = {
     "C": 0,
-    "C#": 1, "Db": 1,
+    "C#": 1,
+    "Db": 1,
     "D": 2,
-    "D#": 3, "Eb": 3,
+    "D#": 3,
+    "Eb": 3,
     "E": 4,
     "F": 5,
-    "F#": 6, "Gb": 6,
+    "F#": 6,
+    "Gb": 6,
     "G": 7,
-    "G#": 8, "Ab": 8,
+    "G#": 8,
+    "Ab": 8,
     "A": 9,
-    "A#": 10, "Bb": 10,
+    "A#": 10,
+    "Bb": 10,
     "B": 11,
 }
 
@@ -96,33 +101,33 @@ def sample_rhythm(
 ) -> list[tuple[int, int]]:
     """
     Sample a rhythm pattern from the groove histogram.
-    
+
     Args:
         hist16: 16-element groove histogram
         density: Number of notes per bar (1-16)
         syncopation: Amount of syncopation (0-1), higher = more off-beat accents
         seed: Random seed for reproducibility
-    
+
     Returns:
         List of (onset, duration) tuples where onset is in 16th steps (0-15)
     """
     rng = np.random.default_rng(seed)
     weights = hist16.copy()
-    
+
     # Sharpen the weights to lock to the groove more tightly if syncopation is low
     if syncopation < 0.3:
-        weights = weights ** 2
-        
-    off = np.array([1,3,5,7,9,11,13,15])
+        weights = weights**2
+
+    off = np.array([1, 3, 5, 7, 9, 11, 13, 15])
     weights[off] += syncopation * weights.mean()
-    
+
     # Normalize
     if weights.sum() > 0:
         weights = weights / weights.sum()
     else:
         weights = np.ones(16) / 16.0
-        
-    onsets = sorted(rng.choice(16, size=min(density,16), replace=False, p=weights))
+
+    onsets = sorted(rng.choice(16, size=min(density, 16), replace=False, p=weights))
     durs = [1 + int(rng.random() < 0.25) for _ in onsets]  # 16ths, sometimes 8ths
     return list(zip(onsets, durs, strict=True))
 
@@ -159,7 +164,7 @@ def assign_pitches(
 ) -> list[tuple[int, int, int]]:
     """
     Assign pitches to rhythmic events (hook-aid API).
-    
+
     Args:
         events: List of (onset, duration) tuples
         scale: Scale name (e.g., "C minor")
@@ -167,7 +172,7 @@ def assign_pitches(
         step_prob: Probability of stepwise motion (vs leaps)
         max_leap: Maximum leap size in scale degrees
         seed: Random seed
-    
+
     Returns:
         List of (onset, duration, pitch) tuples
     """
@@ -205,10 +210,10 @@ def generate_motif(
     Returns notes as list of dicts with 'start', 'duration', 'pitch', 'velocity' keys.
     """
     rng = np.random.default_rng(seed)
-    
+
     # Sample rhythm from the groove histogram
     events = sample_rhythm(histogram, density, syncopation, seed)
-    
+
     # Assign pitches
     _, _, degrees = _parse_scale(scale)
     to_midi = midi_mapper(scale)
@@ -225,13 +230,15 @@ def generate_motif(
             idx += int(rng.integers(-max_leap, max_leap + 1))
         idx = max(0, idx)
         pitch = _fit_to_register(to_midi(idx), register)
-        notes.append({
-            "start": int(onset),
-            "duration": int(dur),
-            "pitch": int(pitch),
-            "velocity": int(80 + int(rng.integers(-10, 10)))
-        })
-    
+        notes.append(
+            {
+                "start": int(onset),
+                "duration": int(dur),
+                "pitch": int(pitch),
+                "velocity": int(80 + int(rng.integers(-10, 10))),
+            }
+        )
+
     return notes
 
 
@@ -244,11 +251,11 @@ def vary_motif(
     """Create a variation of the motif by slightly altering pitches and rhythms."""
     rng = np.random.default_rng(seed)
     _, _, degrees = _parse_scale(scale)
-    
+
     varied = []
     for note in motif:
         new_note = note.copy()
-        
+
         # Randomly vary pitch by a step or two
         if rng.random() < 0.4:
             # Find current scale degree approximately
@@ -259,17 +266,18 @@ def vary_motif(
             new_pitch = current_pitch + shift
             new_pitch = _fit_to_register(new_pitch, register)
             new_note["pitch"] = int(new_pitch)
-        
+
         # Occasionally shift timing slightly
         if rng.random() < 0.2:
             new_note["start"] = max(0, min(15, note["start"] + rng.choice([-1, 1])))
-        
+
         # Vary velocity
         new_note["velocity"] = int(max(60, min(127, note["velocity"] + rng.integers(-15, 15))))
-        
+
         varied.append(new_note)
-    
+
     return varied
+
 
 def generate_structured_hook(
     histogram: NDArray[np.floating[Any]],
@@ -284,65 +292,66 @@ def generate_structured_hook(
 
     Returns list of note dicts with musical resolution to tonic.
     """
-    
+
     # Generate Motif A (Bar 1)
     motif_a = generate_motif(histogram, scale, register, density, syncopation, seed)
-    
+
     # Generate Motif B (Bar 3 - Variation)
     motif_b = vary_motif(motif_a, scale, register, seed + 1)
-    
+
     # Assemble A-A-B-A
     full_hook = []
-    
+
     # Bar 1: A
     for note in motif_a:
         full_hook.append(note.copy())
-        
+
     # Bar 2: A (maybe slight variation?)
     for note in motif_a:
         n = note.copy()
-        n["start"] += 16 # Shift to 2nd bar
+        n["start"] += 16  # Shift to 2nd bar
         full_hook.append(n)
-        
+
     # Bar 3: B
     for note in motif_b:
         n = note.copy()
-        n["start"] += 32 # Shift to 3rd bar
+        n["start"] += 32  # Shift to 3rd bar
         full_hook.append(n)
-        
+
     # Bar 4: A (Resolution)
     for note in motif_a:
         n = note.copy()
-        n["start"] += 48 # Shift to 4th bar
+        n["start"] += 48  # Shift to 4th bar
         full_hook.append(n)
-        
+
     # Musical Constraints: End on Tonic
     if full_hook:
         to_midi = midi_mapper(scale)
         tonic = _fit_to_register(to_midi(0), register)
-        
+
         # 1. Set last note to Tonic
         last_note = full_hook[-1]
         last_note["pitch"] = tonic
-        
+
         # 2. Approach from Leading Tone (or Dominant)
         if len(full_hook) > 1:
             penultimate = full_hook[-2]
             # Leading tone is index -1 (or 6 in major, 6/7 in minor depending on scale)
             # Let's just use the midi_mapper to find the note below the tonic
-            
+
             # Find scale degree of tonic (0) -> -1 is leading tone
             leading_tone = _fit_to_register(to_midi(-1), register)
-            
+
             # If leading tone is too far, try dominant (index 4)
             dominant = _fit_to_register(to_midi(4), register)
-            
-            # Choose leading tone if it's close to the penultimate note's current pitch, else dominant
+
+            # Choose leading tone if it's close to the penultimate
+            # note's current pitch, else dominant
             if abs(penultimate["pitch"] - leading_tone) < abs(penultimate["pitch"] - dominant):
                 penultimate["pitch"] = leading_tone
             else:
                 penultimate["pitch"] = dominant
-        
+
     return full_hook
 
 
@@ -398,7 +407,7 @@ def detect_scale_from_audio(
                 best_scale = scale_name
 
         return best_scale, float(best_score)
-    
+
     else:
         # Accurate mode: Use HPSS + chroma_cqt (hook-aid approach)
         harmonic, _ = librosa.effects.hpss(y)
@@ -430,4 +439,3 @@ def detect_scale_from_audio(
             return None, float(best_score)
 
         return best_scale, float(best_score)
-

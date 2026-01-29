@@ -5,14 +5,12 @@ Comprehensive unit tests for genre classification module.
 import numpy as np
 import pytest
 from hookgen_core.genre import (
-    extract_rhythm_features,
-    compute_template_similarity,
+    GENRE_TEMPLATES,
+    classify_genre,
     compute_bpm_score,
     compute_feature_match_score,
-    classify_genre,
-    GENRE_TEMPLATES,
-    CONFIDENCE_THRESHOLD,
-    AMBIGUITY_THRESHOLD,
+    compute_template_similarity,
+    extract_rhythm_features,
 )
 
 
@@ -399,7 +397,7 @@ class TestGenreClassification:
         assert "prob_gap" in result.debug
 
         # Check genre breakdowns structure
-        for tag, breakdown in result.debug["genre_breakdowns"].items():
+        for _tag, breakdown in result.debug["genre_breakdowns"].items():
             assert "template_similarity" in breakdown
             assert "best_shift" in breakdown
             assert "bpm_score" in breakdown

@@ -49,7 +49,8 @@ def _confidence_badge(scale: Optional[str], score: float) -> None:
 def _analyze_audio(file_bytes: bytes):
     """Heavy audio analysis (load, tempo, histogram, scale) cached per upload."""
     buffer = io.BytesIO(file_bytes)
-    audio_array, sample_rate = librosa.load(buffer, sr=22050, mono=True)
+    audio_array, sample_rate_raw = librosa.load(buffer, sr=22050, mono=True)
+    sample_rate: int = int(sample_rate_raw)
 
     detected_bpm, beat_times = estimate_bpm_and_beats(audio_array, sample_rate)
     ticks = ticks_from_beats(beat_times, subdiv=4)
@@ -89,8 +90,16 @@ density = st.slider("Notes per bar", 4, 12, 7, help=notes_help)
 sync_help = "0 keeps hits on the grid; 1 pushes accents to the off-beats for a funkier feel."
 sync = st.slider("Groove push", 0.0, 1.0, 0.5, 0.1, help=sync_help)
 
-register_help = "Low hugs the lower octave, mid sits around middle C, high jumps up an octave."
-register = st.select_slider("Pitch range", options=["low", "mid", "high"], value="mid", help=register_help)
+register_help = (
+    "Low hugs the lower octave, mid sits around middle C,"
+    " high jumps up an octave."
+)
+register = st.select_slider(
+    "Pitch range",
+    options=["low", "mid", "high"],
+    value="mid",
+    help=register_help,
+)
 
 if file:
     uploaded_name = file.name

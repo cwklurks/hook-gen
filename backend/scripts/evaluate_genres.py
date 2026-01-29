@@ -56,7 +56,8 @@ def main():
             print(f"Processing {wav_file.name}...", end=" ", flush=True)
 
             # Load and analyze
-            y, sr = librosa.load(wav_file, sr=22050, mono=True, duration=8)
+            y, sr_raw = librosa.load(wav_file, sr=22050, mono=True, duration=8)
+            sr = int(sr_raw)
             bpm, beat_times = estimate_bpm_and_beats(y, sr)
             ticks = ticks_from_beats(beat_times, subdiv=4)
             histogram = groove_histogram(y, sr, ticks)

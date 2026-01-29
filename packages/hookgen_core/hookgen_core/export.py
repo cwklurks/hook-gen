@@ -56,10 +56,15 @@ def _append_notes(
     for tick, event_type, pitch in events:
         delta = max(0, tick - current_tick)
         vel = velocity if event_type == "note_on" else 0
-        track.append(Message(
-            event_type, note=int(pitch), velocity=vel,
-            time=delta, channel=channel,
-        ))
+        track.append(
+            Message(
+                event_type,
+                note=int(pitch),
+                velocity=vel,
+                time=delta,
+                channel=channel,
+            )
+        )
         current_tick = tick
 
 
@@ -196,10 +201,7 @@ def hooks_to_wav_bytes(
     bpm: float,
     sample_rate: int = 22050,
 ) -> bytes:
-    tracks = [
-        _notes_to_audio_array(notes, bpm=bpm, sample_rate=sample_rate)
-        for notes in midis
-    ]
+    tracks = [_notes_to_audio_array(notes, bpm=bpm, sample_rate=sample_rate) for notes in midis]
     if not tracks:
         return notes_to_wav_bytes([], bpm=bpm, sample_rate=sample_rate)
 
@@ -212,7 +214,3 @@ def hooks_to_wav_bytes(
         mix /= len(tracks)
 
     return _float_audio_to_wav_bytes(np.clip(mix, -1.0, 1.0), sample_rate=sample_rate)
-
-
-
-

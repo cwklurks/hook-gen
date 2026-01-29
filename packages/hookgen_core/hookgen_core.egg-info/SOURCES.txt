@@ -1,5 +1,13 @@
 README.md
 pyproject.toml
+hookgen_core/__init__.py
+hookgen_core/export.py
+hookgen_core/genre.py
+hookgen_core/motif.py
+hookgen_core/pkg_resources.py
+hookgen_core/py.typed
+hookgen_core/rhythm.py
+hookgen_core/ui_helpers.py
 hookgen_core.egg-info/PKG-INFO
 hookgen_core.egg-info/SOURCES.txt
 hookgen_core.egg-info/dependency_links.txt

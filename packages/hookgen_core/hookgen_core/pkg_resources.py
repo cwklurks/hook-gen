@@ -2,6 +2,7 @@
 
 Only implements the tiny subset pretty_midi requires (resource_filename).
 """
+
 from __future__ import annotations
 
 import importlib
@@ -49,7 +50,3 @@ def resource_filename(package_or_requirement: PackageLike, resource_name: str) -
     except (FileNotFoundError, AttributeError):
         package_path = Path(getattr(package, "__file__", "")).parent
         return str(package_path / resource_name)
-
-
-
-

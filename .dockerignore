@@ -31,8 +31,7 @@ hook-aid/
 # Docs
 *.md
 !README.md
+!packages/hookgen_core/README.md
 
 # Docker
 docker-compose.yml
-
-

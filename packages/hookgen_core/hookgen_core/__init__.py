@@ -77,7 +77,3 @@ __all__ = [
     "GenreResult",
     "GENRE_TEMPLATES",
 ]
-
-
-
-

@@ -4,7 +4,6 @@ Comprehensive unit tests for genre classification module.
 
 import numpy as np
 import pytest
-
 from hookgen_core.genre import (
     GENRE_TEMPLATES,
     classify_genre,

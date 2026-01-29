@@ -38,6 +38,5 @@ dev = [
 where = ["."]
 include = ["hookgen_core*"]
 
-
-
-
+[tool.setuptools.package-data]
+hookgen_core = ["py.typed"]

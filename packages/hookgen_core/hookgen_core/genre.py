@@ -15,9 +15,11 @@ import numpy as np
 # DATA STRUCTURES
 # ============================================================================
 
+
 @dataclass
 class GenreResult:
     """Result of genre classification."""
+
     tags: List[str]  # Top 1-3 genre tags
     confidence: float  # Overall confidence (0-1)
     explanation: List[str]  # 3-5 human-readable explanation bullets
@@ -39,8 +41,22 @@ class GenreResult:
 GENRE_TEMPLATES = {
     "house_four_on_floor": {
         "template": [
-            0.22, 0.02, 0.03, 0.02, 0.21, 0.02, 0.03, 0.02,
-            0.21, 0.02, 0.03, 0.02, 0.21, 0.02, 0.03, 0.02
+            0.22,
+            0.02,
+            0.03,
+            0.02,
+            0.21,
+            0.02,
+            0.03,
+            0.02,
+            0.21,
+            0.02,
+            0.03,
+            0.02,
+            0.21,
+            0.02,
+            0.03,
+            0.02,
         ],
         "bpm_prior": (124.0, 8.0),
         "features": {
@@ -58,8 +74,22 @@ GENRE_TEMPLATES = {
     },
     "reggaeton_dembow": {
         "template": [
-            0.15, 0.03, 0.05, 0.12, 0.10, 0.03, 0.15, 0.02,
-            0.15, 0.03, 0.05, 0.12, 0.10, 0.03, 0.02, 0.02
+            0.15,
+            0.03,
+            0.05,
+            0.12,
+            0.10,
+            0.03,
+            0.15,
+            0.02,
+            0.15,
+            0.03,
+            0.05,
+            0.12,
+            0.10,
+            0.03,
+            0.02,
+            0.02,
         ],
         "bpm_prior": (96.0, 6.0),
         "features": {
@@ -77,8 +107,22 @@ GENRE_TEMPLATES = {
     },
     "trap_halftime": {
         "template": [
-            0.18, 0.03, 0.08, 0.03, 0.15, 0.03, 0.10, 0.03,
-            0.18, 0.03, 0.08, 0.03, 0.05, 0.03, 0.02, 0.02
+            0.18,
+            0.03,
+            0.08,
+            0.03,
+            0.15,
+            0.03,
+            0.10,
+            0.03,
+            0.18,
+            0.03,
+            0.08,
+            0.03,
+            0.05,
+            0.03,
+            0.02,
+            0.02,
         ],
         "bpm_prior": (140.0, 12.0),
         "features": {
@@ -96,8 +140,22 @@ GENRE_TEMPLATES = {
     },
     "dnb_breakbeat": {
         "template": [
-            0.12, 0.06, 0.09, 0.06, 0.11, 0.06, 0.08, 0.06,
-            0.10, 0.06, 0.08, 0.06, 0.07, 0.05, 0.03, 0.02
+            0.12,
+            0.06,
+            0.09,
+            0.06,
+            0.11,
+            0.06,
+            0.08,
+            0.06,
+            0.10,
+            0.06,
+            0.08,
+            0.06,
+            0.07,
+            0.05,
+            0.03,
+            0.02,
         ],
         "bpm_prior": (174.0, 8.0),
         "features": {
@@ -116,8 +174,22 @@ GENRE_TEMPLATES = {
     },
     "techno_driving": {
         "template": [
-            0.21, 0.03, 0.04, 0.03, 0.20, 0.03, 0.04, 0.03,
-            0.20, 0.03, 0.04, 0.03, 0.20, 0.03, 0.04, 0.03
+            0.21,
+            0.03,
+            0.04,
+            0.03,
+            0.20,
+            0.03,
+            0.04,
+            0.03,
+            0.20,
+            0.03,
+            0.04,
+            0.03,
+            0.20,
+            0.03,
+            0.04,
+            0.03,
         ],
         "bpm_prior": (130.0, 10.0),
         "features": {
@@ -143,6 +215,7 @@ AMBIGUITY_THRESHOLD = 0.12
 # ============================================================================
 # FEATURE EXTRACTION
 # ============================================================================
+
 
 def extract_rhythm_features(histogram: np.ndarray, bpm: float) -> Dict[str, float]:
     """
@@ -201,6 +274,7 @@ def extract_rhythm_features(histogram: np.ndarray, bpm: float) -> Dict[str, floa
 # TEMPLATE MATCHING
 # ============================================================================
 
+
 def compute_template_similarity(
     histogram: np.ndarray,
     template: np.ndarray,
@@ -245,9 +319,8 @@ def compute_template_similarity(
 # BPM SCORING
 # ============================================================================
 
-def compute_bpm_score(
-    bpm: float, center: float, sigma: float
-) -> Tuple[float, float, str]:
+
+def compute_bpm_score(bpm: float, center: float, sigma: float) -> Tuple[float, float, str]:
     """
     Compute BPM match score with half/double time detection.
 
@@ -271,7 +344,7 @@ def compute_bpm_score(
 
     for test_bpm, interp in candidates:
         # Gaussian score
-        score = np.exp(-((test_bpm - center) / sigma) ** 2)
+        score = np.exp(-(((test_bpm - center) / sigma) ** 2))
 
         if score > best_score:
             best_score = score
@@ -284,6 +357,7 @@ def compute_bpm_score(
 # ============================================================================
 # FEATURE MATCHING
 # ============================================================================
+
 
 def compute_feature_match_score(
     features: Dict[str, float], expectations: Dict[str, Tuple[float, float, float]]
@@ -329,6 +403,7 @@ def compute_feature_match_score(
 # MAIN CLASSIFICATION
 # ============================================================================
 
+
 def classify_genre(
     bpm: float,
     histogram: np.ndarray,
@@ -373,9 +448,7 @@ def classify_genre(
         bpm_prior = config["bpm_prior"]  # type: ignore[index]
         bpm_center = float(bpm_prior[0])  # type: ignore[index]
         bpm_sigma = float(bpm_prior[1])  # type: ignore[index]
-        bpm_score, adjusted_bpm, bpm_interp = compute_bpm_score(
-            bpm, bpm_center, bpm_sigma
-        )
+        bpm_score, adjusted_bpm, bpm_interp = compute_bpm_score(bpm, bpm_center, bpm_sigma)
 
         # 3. Feature matching (20% weight)
         feature_expectations: Dict[str, Tuple[float, float, float]] = {
@@ -432,9 +505,7 @@ def classify_genre(
         # Low confidence or ambiguous → return "unknown"
         result_tags = ["unknown"]
         confidence = float(top_prob)
-        explanation = _generate_unknown_explanation(
-            features, top_prob, prob_gap, sorted_tags[0]
-        )
+        explanation = _generate_unknown_explanation(features, top_prob, prob_gap, sorted_tags[0])
         preset = _get_default_preset()
     else:
         # Return top K tags above threshold
@@ -471,6 +542,7 @@ def classify_genre(
 # ============================================================================
 # EXPLANATION GENERATION
 # ============================================================================
+
 
 def _generate_explanation(
     tag: str,
@@ -532,9 +604,7 @@ def _generate_unknown_explanation(
     explanation = []
 
     if top_prob < CONFIDENCE_THRESHOLD:
-        explanation.append(
-            f"Confidence too low ({top_prob:.1%} < {CONFIDENCE_THRESHOLD:.1%})"
-        )
+        explanation.append(f"Confidence too low ({top_prob:.1%} < {CONFIDENCE_THRESHOLD:.1%})")
 
     if prob_gap < AMBIGUITY_THRESHOLD:
         explanation.append(f"Ambiguous rhythm (top genres too close: gap={prob_gap:.1%})")

@@ -75,6 +75,8 @@ module = [
     "pytest.*",
     "yaml",
     "yaml.*",
+    "hookgen_core",
+    "hookgen_core.*",
 ]
 ignore_missing_imports = true
 

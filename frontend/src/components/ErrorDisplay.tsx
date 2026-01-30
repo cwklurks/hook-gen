@@ -21,13 +21,13 @@ export default function ErrorDisplay({
   className = "",
 }: ErrorDisplayProps) {
   const [countdown, setCountdown] = useState<number | null>(retryCountdown ?? null);
+  const [prevRetryCountdown, setPrevRetryCountdown] = useState(retryCountdown);
 
-  // Handle countdown timer for rate limiting
-  useEffect(() => {
-    if (retryCountdown !== undefined) {
-      setCountdown(retryCountdown);
-    }
-  }, [retryCountdown]);
+  // React-approved derived state pattern (not in useEffect)
+  if (retryCountdown !== prevRetryCountdown) {
+    setPrevRetryCountdown(retryCountdown);
+    setCountdown(retryCountdown ?? null);
+  }
 
   useEffect(() => {
     if (countdown === null || countdown <= 0) return;

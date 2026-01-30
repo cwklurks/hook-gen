@@ -284,23 +284,22 @@ async def analyze_audio(request: Request, file: UploadFile = File(...)):  # noqa
                     },
                 )
 
-            print("[ANALYZE-SIMPLE] Starting audio decode (fast path)...", flush=True)
+            logger.info("[ANALYZE-SIMPLE] Starting audio decode (fast path)...")
 
             # Use fast_load_audio which uses soundfile directly for WAV files
             audio_array, sample_rate = await loop.run_in_executor(
                 None, lambda: fast_load_audio(buffer, MAX_AUDIO_DURATION_SECONDS)
             )
-            print(
-                f"[ANALYZE-SIMPLE] Decoded: {len(audio_array)} samples @ {sample_rate}Hz",
-                flush=True,
+            logger.info(
+                f"[ANALYZE-SIMPLE] Decoded: {len(audio_array)} samples @ {sample_rate}Hz"
             )
 
             # Process audio analysis
-            print("[ANALYZE-SIMPLE] Starting BPM detection...", flush=True)
+            logger.info("[ANALYZE-SIMPLE] Starting BPM detection...")
             detected_bpm, beat_times = await loop.run_in_executor(
                 None, lambda: estimate_bpm_and_beats(audio_array, sample_rate)
             )
-            print(f"[ANALYZE-SIMPLE] BPM: {detected_bpm}, beats: {len(beat_times)}", flush=True)
+            logger.info(f"[ANALYZE-SIMPLE] BPM: {detected_bpm}, beats: {len(beat_times)}")
 
             ticks = ticks_from_beats(beat_times, subdiv=4)
             histogram = await loop.run_in_executor(
@@ -419,17 +418,12 @@ async def analyze_audio_stream(request: Request, file: UploadFile = File(...)): 
     - result: {bpm, scale, scale_score, histogram}
     - error: {detail: string}
     """
-    # Immediate log BEFORE the generator starts
-    import sys
-
-    print(f"[ANALYZE] Request received: {file.filename}, {file.content_type}", flush=True)
-    sys.stdout.flush()
     logger.info(f"[ANALYZE] Request received: {file.filename}, {file.content_type}")
 
     async def generate_events():
         buffer = None
         try:
-            print("[ANALYZE] Generator started", flush=True)
+            logger.info("[ANALYZE] Generator started")
             # Stage 1: Validating file (0-10%)
             yield sse_event(
                 "progress", {"stage": "validating", "progress": 0, "message": "Validating file..."}

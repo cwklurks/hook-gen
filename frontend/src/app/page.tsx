@@ -143,14 +143,12 @@ export default function Home() {
 
   // Fetch example files on mount
   useEffect(() => {
-    console.log("Fetching examples from:", `${API_BASE}/examples`);
     fetch(`${API_BASE}/examples`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
       .then((data) => {
-        console.log("Loaded examples:", data);
         setExamples(data);
       })
       .catch((err) => console.error("Failed to load examples:", err));

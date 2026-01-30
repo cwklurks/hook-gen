@@ -13,3 +13,6 @@ slowapi
 # Development dependencies
 ruff
 mypy
+pytest
+pyyaml
+pre-commit

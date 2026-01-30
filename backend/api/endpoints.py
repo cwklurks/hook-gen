@@ -902,31 +902,37 @@ class ExampleFile(BaseModel):
 
 
 def parse_example_filename(filename: str) -> dict:
-    """Parse example filename like 'groove_100bpm.wav' into metadata."""
-    name = filename.replace(".wav", "").replace("_", " ").title()
+    """Parse example filename into display metadata."""
+    base_name = filename.replace(".wav", "")
 
-    # Extract BPM if present
+    display_names = {
+        "dnb_breakbeat_174bpm_generated": "DnB Breakbeat",
+        "house_four_on_floor_124bpm_generated": "House Four-on-Floor",
+        "reggaeton_dembow_96bpm_generated": "Reggaeton Dembow",
+        "techno_driving_130bpm_generated": "Techno Driving",
+        "trap_halftime_140bpm_generated": "Trap Half-time",
+    }
+
+    descriptions = {
+        "dnb_breakbeat_174bpm_generated": "Fast breakbeat pattern at 174 BPM",
+        "house_four_on_floor_124bpm_generated": "Classic four-on-the-floor kick at 124 BPM",
+        "reggaeton_dembow_96bpm_generated": "Dembow rhythm pattern at 96 BPM",
+        "techno_driving_130bpm_generated": "Driving techno beat at 130 BPM",
+        "trap_halftime_140bpm_generated": "Half-time trap feel at 140 BPM",
+    }
+
+    name = display_names.get(
+        base_name,
+        base_name.replace("_", " ").title(),
+    )
+
+    # Extract BPM for fallback description
     bpm_part = ""
-    for part in filename.replace(".wav", "").split("_"):
+    for part in base_name.split("_"):
         if "bpm" in part.lower():
             bpm_part = part.replace("bpm", " BPM")
             break
 
-    # Create human-readable description
-    base_name = filename.replace(".wav", "")
-    descriptions = {
-        "groove_100bpm": "Funky groove pattern",
-        "groove_100bpm_long": "Extended groove pattern",
-        "straight_120bpm": "Straight 4/4 beat",
-        "fouronthefloor_124bpm": "Classic house kick pattern",
-        "shuffle_92bpm": "Shuffled swing feel",
-        "halftime_70bpm": "Half-time feel",
-        "reggaeton_96bpm": "Reggaeton dembow rhythm",
-        "brokenbeat_128bpm": "Syncopated broken beat",
-        "bass_cminor_90bpm": "C minor bass groove",
-        "keys_eminor_100bpm": "E minor keys loop",
-        "plucks_gmajor_110bpm": "G major pluck synth",
-    }
     description = descriptions.get(
         base_name,
         f"Example loop at {bpm_part}" if bpm_part else "Example drum loop",
@@ -946,7 +952,7 @@ def list_examples() -> List[ExampleFile]:
         return []
 
     examples = []
-    for f in sorted(examples_dir.glob("*.wav")):
+    for f in sorted(examples_dir.glob("*_generated.wav")):
         meta = parse_example_filename(f.name)
         examples.append(
             ExampleFile(name=meta["name"], filename=f.name, description=meta["description"])

@@ -1,0 +1,114 @@
+[
+  {
+    "file": "bass_cminor_90bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20620946682736457,
+    "correct": null
+  },
+  {
+    "file": "brokenbeat_128bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.21043461762275478,
+    "correct": null
+  },
+  {
+    "file": "dnb_breakbeat_174bpm_generated.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.2159901430915315,
+    "correct": null
+  },
+  {
+    "file": "fouronthefloor_124bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.212097009059236,
+    "correct": null
+  },
+  {
+    "file": "groove_100bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.21446213187702146,
+    "correct": null
+  },
+  {
+    "file": "groove_100bpm_long.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.2161484323798915,
+    "correct": null
+  },
+  {
+    "file": "halftime_70bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.21745694791245493,
+    "correct": null
+  },
+  {
+    "file": "house_four_on_floor_124bpm_generated.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20620411904512204,
+    "correct": null
+  },
+  {
+    "file": "keys_eminor_100bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20335714506315242,
+    "correct": null
+  },
+  {
+    "file": "plucks_gmajor_110bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20628712016646955,
+    "correct": null
+  },
+  {
+    "file": "reggaeton_96bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.2178151696850719,
+    "correct": null
+  },
+  {
+    "file": "reggaeton_dembow_96bpm_generated.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20785776069858952,
+    "correct": null
+  },
+  {
+    "file": "shuffle_92bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.21486762709284957,
+    "correct": null
+  },
+  {
+    "file": "straight_120bpm.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20622136273088815,
+    "correct": null
+  },
+  {
+    "file": "techno_driving_130bpm_generated.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.20848221827588306,
+    "correct": null
+  },
+  {
+    "file": "trap_halftime_140bpm_generated.wav",
+    "expected": null,
+    "predicted": "unknown",
+    "confidence": 0.2092988554519666,
+    "correct": null
+  }
+]

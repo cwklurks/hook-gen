@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github } from "lucide-react";
+import { Music, Sliders, Activity, Zap, ArrowRight, Disc3, Github } from "lucide-react";
 import Waveform, { WaveformControls } from "@/components/Waveform";
 import PianoRoll from "@/components/PianoRoll";
 import SynthPlayer, { SynthPlayerControls } from "@/components/SynthPlayer";
@@ -57,7 +57,7 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [uploadError, setUploadError] = useState<ApiErrorResponse | string | null>(null);
+  const [error, setError] = useState<ApiErrorResponse | string | null>(null);
   const [retryState, setRetryState] = useState<RetryState | null>(null);
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
@@ -90,10 +90,6 @@ export default function Home() {
 
   // Abort controller for cancelling requests
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const ALLOWED_EXTENSIONS = [".wav", ".mp3", ".mp4", ".m4a"];
-  const MAX_FILE_SIZE_MB = 20;
-  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
   // Cleanup object URLs and abort controllers to prevent memory leaks
   useEffect(() => {
@@ -155,7 +151,7 @@ export default function Home() {
   }, []);
 
   const handleExampleSelect = async (example: ExampleFile) => {
-    setUploadError(null);
+    setError(null);
     setSelectedExample(example.filename);
     setIsAnalyzing(true);
     setGeneratedHooks([]);
@@ -207,7 +203,7 @@ export default function Home() {
 
       if (!analysisRes.ok) {
         const parsedError = parseErrorResponse(data);
-        setUploadError(parsedError || data.detail || "Failed to analyze example file.");
+        setError(parsedError || data.detail || "Failed to analyze example file.");
         if (parsedError?.retry_after) {
           setRetryCountdown(parsedError.retry_after);
         }
@@ -223,7 +219,7 @@ export default function Home() {
       setAnalysis(data);
     } catch (err) {
       console.error("Example analysis failed", err);
-      setUploadError({
+      setError({
         error_code: "INTERNAL_ERROR",
         message: "Failed to load example. Please try again.",
         retryable: true,
@@ -231,111 +227,6 @@ export default function Home() {
       setAudioUrl(null);
     } finally {
       setIsAnalyzing(false);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const uploadedFile = e.target.files[0];
-
-      // Abort any in-progress request
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = new AbortController();
-
-      // Clear previous error and example selection
-      setUploadError(null);
-      setSelectedExample(null);
-      setGeneratedHooks([]);
-      setWaveformReady(false);
-      setIsPlayingTogether(false);
-      setRetryState(null);
-      setRetryCountdown(null);
-
-      // Validate file extension
-      const fileName = uploadedFile.name.toLowerCase();
-      const fileExt = fileName.substring(fileName.lastIndexOf("."));
-      if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
-        setUploadError({
-          error_code: "UNSUPPORTED_FORMAT",
-          message: "Unsupported file type.",
-          retryable: false,
-        });
-        return;
-      }
-
-      // Validate file size
-      if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
-        setUploadError({
-          error_code: "FILE_TOO_LARGE",
-          message: "File exceeds 20MB limit.",
-          retryable: false,
-        });
-        return;
-      }
-
-      setAudioUrl(URL.createObjectURL(uploadedFile));
-
-      // Auto analyze (non-streaming for better compatibility with Render)
-      setIsAnalyzing(true);
-      setAnalysisProgress({
-        stage: "analyzing",
-        progress: 50,
-        message: "Analyzing audio... this may take a moment",
-      });
-
-      const formData = new FormData();
-      formData.append("file", uploadedFile);
-
-      try {
-        const response = await fetchWithRetry(`${API_BASE}/analyze`, {
-          method: "POST",
-          body: formData,
-          abortSignal: abortControllerRef.current.signal,
-          onRetryStateChange: setRetryState,
-          retryConfig: {
-            maxRetries: 2, // Fewer retries for large uploads
-            retryableStatuses: [429, 502, 503, 504],
-          },
-        });
-
-        setRetryState(null);
-
-        if (!response.ok) {
-          const errorData = await response
-            .json()
-            .catch(() => ({ detail: "Failed to analyze audio file." }));
-          const parsedError = parseErrorResponse(errorData);
-
-          setUploadError(parsedError || errorData.detail || "Failed to analyze audio file.");
-          setAudioUrl(null);
-
-          // Set retry countdown for rate limiting
-          if (parsedError?.retry_after) {
-            setRetryCountdown(parsedError.retry_after);
-          }
-
-          setIsAnalyzing(false);
-          return;
-        }
-
-        const data = await response.json();
-        setAnalysis(data);
-        setIsAnalyzing(false);
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          // Request was cancelled, don't show error
-          setIsAnalyzing(false);
-          return;
-        }
-
-        console.error("Analysis failed", err);
-        setUploadError({
-          error_code: "INTERNAL_ERROR",
-          message: "Failed to connect to the server. Please try again.",
-          retryable: true,
-        });
-        setIsAnalyzing(false);
-      }
     }
   };
 
@@ -347,7 +238,7 @@ export default function Home() {
     abortControllerRef.current = new AbortController();
 
     setIsGenerating(true);
-    setUploadError(null);
+    setError(null);
     setRetryState(null);
     setRetryCountdown(null);
 
@@ -375,7 +266,7 @@ export default function Home() {
         const parsedError = parseErrorResponse(errorData);
 
         console.error("Generation error:", errorData);
-        setUploadError(parsedError || errorData.detail || "Failed to generate hooks. Please try again.");
+        setError(parsedError || errorData.detail || "Failed to generate hooks. Please try again.");
 
         if (parsedError?.retry_after) {
           setRetryCountdown(parsedError.retry_after);
@@ -386,7 +277,7 @@ export default function Home() {
       const data = await res.json();
       if (!data.hooks || !Array.isArray(data.hooks)) {
         console.error("Invalid response format:", data);
-        setUploadError({
+        setError({
           error_code: "INTERNAL_ERROR",
           message: "Received invalid data from server. Please try again.",
           retryable: true,
@@ -396,14 +287,14 @@ export default function Home() {
 
       setGeneratedHooks(data.hooks);
       setSelectedHookIndex(0);
-      setUploadError(null);
+      setError(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return;
       }
 
       console.error("Generation failed", err);
-      setUploadError({
+      setError({
         error_code: "INTERNAL_ERROR",
         message: "Failed to connect to the server. Please try again.",
         retryable: true,
@@ -453,125 +344,93 @@ export default function Home() {
           <p className="mx-auto max-w-lg text-base leading-relaxed font-light tracking-wide text-neutral-400 md:text-lg">
             <strong className="text-neutral-200">Generate melodies that lock to your beat.</strong>
             <br />
-            Upload a loop to begin.
+            Select a genre sample to begin.
           </p>
         </motion.header>
 
         {/* Main Workflow */}
         <div className="space-y-8">
-          {/* Upload & Analysis */}
+          {/* Sample Selection & Analysis */}
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.8 }}
             className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2"
           >
-            {/* Upload Area */}
-            <div className="flex h-full flex-col gap-6 rounded-lg border border-white/10 bg-white/[0.02] p-6">
-              <div
-                className={`group relative min-h-[200px] flex-1 cursor-pointer overflow-hidden rounded-md border-2 border-dashed transition-all focus-within:ring-2 focus-within:ring-white/30 ${uploadError ? "border-red-500/50 bg-red-500/[0.02]" : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"}`}
-              >
-                <input
-                  type="file"
-                  onChange={handleFileUpload}
-                  accept=".wav,.mp3,.mp4,.m4a,audio/wav,audio/mpeg,audio/mp4"
-                  className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
-                  aria-label="Upload audio file"
-                />
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4">
-                  <div
-                    className={`rounded-full bg-white/5 p-4 transition-transform duration-500 group-hover:scale-110 ${uploadError ? "text-red-400" : "text-neutral-400"}`}
-                  >
-                    <Upload size={24} strokeWidth={1.5} />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium text-neutral-200">Drop Audio File</p>
-                    <p className="mt-1 text-sm text-neutral-500">WAV, MP3, or MP4 • Max 20MB</p>
-                  </div>
-                  {/* Error display */}
-                  {uploadError && (
-                    <div className="mt-2 w-full max-w-md px-2">
-                      <ErrorDisplay
-                        error={uploadError}
-                        onDismiss={() => {
-                          setUploadError(null);
-                          setRetryCountdown(null);
-                        }}
-                        onRetry={
-                          typeof uploadError !== "string" && uploadError.retryable
-                            ? () => {
-                                const input = document.querySelector(
-                                  'input[type="file"]'
-                                ) as HTMLInputElement;
-                                if (input?.files?.[0]) {
-                                  handleFileUpload({
-                                    target: input,
-                                  } as React.ChangeEvent<HTMLInputElement>);
-                                }
-                              }
-                            : undefined
-                        }
-                        retryCountdown={retryCountdown}
-                      />
-                    </div>
-                  )}
-                  {/* Retry indicator during retries */}
-                  {retryState?.isRetrying && (
-                    <div className="mt-2 px-2">
-                      <RetryIndicator
-                        attempt={retryState.attempt}
-                        maxAttempts={3}
-                        retryAfterMs={retryState.retryAfterMs}
-                      />
-                    </div>
-                  )}
-                </div>
+            {/* Sample Selection */}
+            <div className="flex h-full flex-col gap-5 rounded-lg border border-white/10 bg-white/[0.02] p-6">
+              <div className="flex items-center gap-2 text-sm tracking-widest text-neutral-400 uppercase">
+                <Disc3 size={16} strokeWidth={1.5} />
+                <span>Choose a Genre</span>
               </div>
 
-              {/* Example Files */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-xs tracking-widest text-neutral-500 uppercase">
-                  <div className="h-px flex-1 bg-white/10"></div>
-                  <span className="flex items-center gap-2">
-                    <Disc3 size={12} />
-                    <span>Try an example</span>
-                  </span>
-                  <div className="h-px flex-1 bg-white/10"></div>
+              {examples.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {examples.map((example) => (
+                    <button
+                      key={example.filename}
+                      onClick={() => handleExampleSelect(example)}
+                      disabled={isAnalyzing}
+                      aria-pressed={selectedExample === example.filename}
+                      aria-label={`Select sample: ${example.name}`}
+                      className={`group relative overflow-hidden rounded-md border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selectedExample === example.filename
+                          ? "border-white/30 bg-white/10 text-white"
+                          : "border-white/5 bg-white/[0.02] text-neutral-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-neutral-200"
+                      }`}
+                    >
+                      <div className="mb-1 flex items-start justify-between">
+                        <div className="truncate text-sm font-medium">{example.name}</div>
+                        {selectedExample === example.filename && (
+                          <Activity size={12} className="shrink-0 animate-pulse text-emerald-400" />
+                        )}
+                      </div>
+                      <div className="line-clamp-2 text-xs leading-relaxed text-neutral-600 transition-colors group-hover:text-neutral-500">
+                        {example.description}
+                      </div>
+                    </button>
+                  ))}
                 </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-white/10 p-6 text-xs text-neutral-600 italic">
+                  <div className="animate-pulse">Loading samples...</div>
+                </div>
+              )}
 
-                {examples.length > 0 ? (
-                  <div className="custom-scrollbar grid max-h-[140px] grid-cols-2 gap-2 overflow-y-auto pr-1">
-                    {examples.map((example) => (
-                      <button
-                        key={example.filename}
-                        onClick={() => handleExampleSelect(example)}
-                        disabled={isAnalyzing}
-                        aria-pressed={selectedExample === example.filename}
-                        aria-label={`Load example: ${example.name}`}
-                        className={`group relative overflow-hidden rounded-md border p-2 text-left transition-all focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 ${
-                          selectedExample === example.filename
-                            ? "border-white/30 bg-white/10 text-white"
-                            : "border-white/5 bg-white/[0.02] text-neutral-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-neutral-200"
-                        }`}
-                      >
-                        <div className="mb-0.5 flex items-start justify-between">
-                          <div className="truncate text-xs font-medium">{example.name}</div>
-                          {selectedExample === example.filename && (
-                            <Activity size={10} className="animate-pulse text-emerald-400" />
-                          )}
-                        </div>
-                        <div className="line-clamp-1 text-[10px] leading-tight text-neutral-600 transition-colors group-hover:text-neutral-500">
-                          {example.description}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center rounded-sm border border-dashed border-white/10 p-4 text-xs text-neutral-600 italic">
-                    <div className="animate-pulse">Loading examples...</div>
-                  </div>
-                )}
-              </div>
+              {/* Error display */}
+              {error && (
+                <div className="w-full">
+                  <ErrorDisplay
+                    error={error}
+                    onDismiss={() => {
+                      setError(null);
+                      setRetryCountdown(null);
+                    }}
+                    onRetry={
+                      typeof error !== "string" && error.retryable
+                        ? () => {
+                            const lastExample = examples.find(
+                              (ex) => ex.filename === selectedExample
+                            );
+                            if (lastExample) {
+                              handleExampleSelect(lastExample);
+                            }
+                          }
+                        : undefined
+                    }
+                    retryCountdown={retryCountdown}
+                  />
+                </div>
+              )}
+              {retryState?.isRetrying && (
+                <div>
+                  <RetryIndicator
+                    attempt={retryState.attempt}
+                    maxAttempts={3}
+                    retryAfterMs={retryState.retryAfterMs}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Analysis Display */}

@@ -27,6 +27,17 @@ node_modules/
 # Claude Code
 .claude/
 
+# AI Tools
+.agent/
+.codex/
+.cursor/
+.gemini/
+.github/skills/
+.goose/
+.kiro/
+.opencode/
+.windsurf/
+
 # Build artifacts
 dist/
 build/

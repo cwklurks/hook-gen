@@ -365,7 +365,7 @@ export default function Home() {
               </div>
 
               {examples.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-wrap justify-center gap-3">
                   {examples.map((example) => (
                     <button
                       key={example.filename}
@@ -373,7 +373,7 @@ export default function Home() {
                       disabled={isAnalyzing}
                       aria-pressed={selectedExample === example.filename}
                       aria-label={`Select sample: ${example.name}`}
-                      className={`group relative overflow-hidden rounded-md border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`group relative overflow-hidden rounded-md border p-4 text-left transition-all focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-[calc(50%-0.375rem)] lg:w-[calc(33.333%-0.5rem)] ${
                         selectedExample === example.filename
                           ? "border-white/30 bg-white/10 text-white"
                           : "border-white/5 bg-white/[0.02] text-neutral-400 hover:border-white/10 hover:bg-white/[0.05] hover:text-neutral-200"

@@ -8,40 +8,42 @@ from api.rate_limit import get_client_ip
 class TestGetClientIp:
     """Tests for get_client_ip function."""
 
-    def test_returns_forwarded_for_first_ip(self):
+    @staticmethod
+    def request_with(*, remote: str, forwarded_for: str | None = None):
         request = MagicMock()
-        request.headers.get.return_value = "1.2.3.4, 5.6.7.8"
-        result = get_client_ip(request)
-        assert result == "1.2.3.4"
-        assert isinstance(result, str)
+        request.client.host = remote
+        request.headers.get.return_value = forwarded_for
+        return request
 
-    def test_returns_forwarded_for_single_ip(self):
-        request = MagicMock()
-        request.headers.get.return_value = "10.0.0.1"
-        result = get_client_ip(request)
-        assert result == "10.0.0.1"
-        assert isinstance(result, str)
+    def test_ignores_forwarded_for_by_default(self, monkeypatch):
+        monkeypatch.delenv("TRUSTED_PROXY_HOPS", raising=False)
+        request = self.request_with(remote="203.0.113.10", forwarded_for="1.2.3.4")
 
-    def test_strips_whitespace_from_forwarded_for(self):
-        request = MagicMock()
-        request.headers.get.return_value = "  1.2.3.4 , 5.6.7.8"
-        result = get_client_ip(request)
-        assert result == "1.2.3.4"
+        assert get_client_ip(request) == "203.0.113.10"
 
-    def test_falls_back_to_remote_address_when_no_forwarded_for(self):
-        request = MagicMock()
-        request.headers.get.return_value = None
-        result = get_client_ip(request)
-        # get_remote_address returns Any, but get_client_ip wraps it in str()
-        assert isinstance(result, str)
+    def test_uses_address_before_trusted_proxy_hops(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "2")
+        request = self.request_with(
+            remote="10.0.0.2",
+            forwarded_for="198.51.100.99, 203.0.113.20, 10.0.0.1",
+        )
 
-    def test_return_type_is_always_str(self):
-        """Verify the return type is str in all code paths (type safety fix)."""
-        # With X-Forwarded-For header
-        request = MagicMock()
-        request.headers.get.return_value = "192.168.1.1"
-        assert type(get_client_ip(request)) is str
+        assert get_client_ip(request) == "203.0.113.20"
 
-        # Without X-Forwarded-For header
-        request.headers.get.return_value = None
-        assert type(get_client_ip(request)) is str
+    def test_falls_back_when_forwarded_chain_is_too_short(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "2")
+        request = self.request_with(remote="203.0.113.10", forwarded_for="1.2.3.4")
+
+        assert get_client_ip(request) == "203.0.113.10"
+
+    def test_falls_back_for_invalid_forwarded_address(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+        request = self.request_with(remote="203.0.113.10", forwarded_for="not-an-ip")
+
+        assert get_client_ip(request) == "203.0.113.10"
+
+    def test_falls_back_for_invalid_proxy_configuration(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_HOPS", "many")
+        request = self.request_with(remote="203.0.113.10", forwarded_for="1.2.3.4")
+
+        assert get_client_ip(request) == "203.0.113.10"

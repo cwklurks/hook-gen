@@ -13,7 +13,13 @@ import librosa
 import numpy as np
 import soundfile as sf
 from api.errors import ErrorCode, ErrorResponse, create_error_response, create_sse_error
-from api.rate_limit import ANALYZE_RATE_LIMIT, GENERATE_RATE_LIMIT, limiter
+from api.rate_limit import (
+    ANALYZE_RATE_LIMIT,
+    EXPORT_RATE_LIMIT,
+    GENERATE_RATE_LIMIT,
+    SESSION_SAVE_RATE_LIMIT,
+    limiter,
+)
 from app.database import get_session, save_session
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -147,8 +153,8 @@ class GenerateRequest(BaseModel):
 
 class Note(BaseModel):
     pitch: int = Field(ge=0, le=127)  # MIDI number
-    start: float = Field(ge=0)  # In beats
-    duration: float = Field(gt=0)  # In beats
+    start: float = Field(ge=0, le=16)  # In beats; generated hooks are four bars
+    duration: float = Field(gt=0, le=16)  # In beats
     velocity: int = Field(100, ge=0, le=127)
 
 
@@ -847,12 +853,13 @@ def generate_hooks(request: Request, req: GenerateRequest):
 
 
 class MidiRequest(BaseModel):
-    notes: List[Note]
+    notes: List[Note] = Field(min_length=1, max_length=256)
     bpm: float = Field(gt=0, le=300)
 
 
 @router.post("/export/midi")
-def export_midi(req: MidiRequest):
+@limiter.limit(EXPORT_RATE_LIMIT)
+def export_midi(request: Request, req: MidiRequest):
     # Convert beats back to 16th steps for export.py
     # export.py expects (onset, duration, pitch) where onset/duration are in 16th steps
     midi_notes = []
@@ -875,7 +882,8 @@ class SessionData(GenerateRequest):
 
 
 @router.post("/session/save")
-def save_session_endpoint(data: SessionData):
+@limiter.limit(SESSION_SAVE_RATE_LIMIT)
+def save_session_endpoint(request: Request, data: SessionData):
     session_id = str(uuid.uuid4())
     save_session(session_id, data.dict())
     return {"id": session_id}
